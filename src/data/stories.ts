@@ -171,6 +171,55 @@ export const stories: Story[] = [
         "هذا هو يسوع، المخلّص اللي يحب كل الناس، وجاء يعطيهم حياة أبدية."
       ]
     }
+  },
+  {
+    id: "2nd-timothy-1",
+    title: {
+      english: "2nd Timothy 1",
+      arabic: "تيموثاوس الثانية ١"
+    },
+    content: {
+      english: [
+        "From Paul, and he is by the will of God a messenger of Jesus Christ for the sake of the promise of life that is in Christ,",
+        "to Timothy, my beloved son, grace to you and mercy and peace from God the Father and Christ Jesus our Lord.",
+        "I thank God greatly, whom I worship with a pure conscience just as I learned from my ancestors, because I still remember you always in my prayers night and day;",
+        "and when I remember your tears (at the time of our separation) I find myself longing to see you so that I may rejoice.",
+        "I also remember your faith that has no hypocrisy, the faith that is in you and which first dwelt in your grandmother Lois then in your mother Eunice, and I am certain that it is in you also.",
+        "For this reason I remind you to fan into flame the gift of God that is in you through the laying on of my hands.",
+        "For God did not give us a spirit of fear but of power, love, and wisdom.",
+        "So don't be ashamed of the testimony about our Lord nor of me, his prisoner, but join me in suffering for the gospel, relying on the power of God.",
+        "For He is the one who saved us and called us with a holy calling, not because of our works but because of His purpose and grace which He gave us in Christ Jesus before the beginning of time,",
+        "and which is now revealed through the appearing of our Savior Jesus Christ who abolished death and brought life and immortality to light through the gospel,",
+        "of which I was appointed a preacher, an apostle, and a teacher.",
+        "And for this reason I also suffer now these sufferings, but I am not ashamed because I know whom I have believed and am fully convinced that He is able to keep what I have entrusted to Him safe until that Day.",
+        "Hold on to the sound words that you heard from me as an example in faith and love that is in Christ Jesus.",
+        "Guard the good deposit that was entrusted to you by the Holy Spirit who dwells in us.",
+        "You know that everyone in the province of Asia including Phygelus and Hermogenes turned away from me.",
+        "May the Lord show mercy to the household of Onesiphorus; he often refreshed me and was not ashamed of my chains.",
+        "On the contrary, when he was in Rome he searched hard until he found me.",
+        "May the Lord grant him mercy from Him on that day, and all the service he rendered in Ephesus you know it well."
+      ],
+      arabic: [
+        "مِنْ بُولُسَ، وَهُوَ بإرادة اللهِ رَسُولٌ لِلْمَسِيحِ يَسُوعَ لأجل الْوَعْدِ بِالْحَيَاةِ اللي هِيَ فِي الْمَسِيحِ،",
+        "لتِيمُوثَاوُسَ، وَلَدِي الْحَبِيبِ ليك النِّعْمَةُ وَالرَّحْمَةُ وَالسَّلامُ مِنَ اللهِ الآبِ وَالْمَسِيحِ يَسُوعَ رَبِّنَا.",
+        "أَشْكُرُ اللهَ كتير، اللي بعْبُدُهُ بِضَمِيرٍ طَاهِرٍ زي ما أَخَذْتُ عَنْ أَجْدَادِي، لانيْ لسة بذكرك دَايماً فِي صلاتي ليل ونهار؛",
+        "ولماْ بتَذَكَّرُ دُمُوعَكَ (سَاعَةَ فراقنا) الاقي نفسي مشتاق أشوفك لأجل ما افرح.",
+        "كَمَان بتَذَكَّرُ إِيمَانَكَ اللي ما فيه رِّيَاءِ، الإِيمَانَ اللي فِيكَ وَاللي من الاول سَكَنَ فِي جَدَّتِكَ لُوييسَ وبعدين فِي أُمِّكَ أَفْنِيكِي، وَأَنَا مُتَأَكِّدٌ أَنَّهُ فِيكَ انت كمان.",
+        "علشان كدة أُنَبِّهُكَ أَنْك تشعل نَارَ مَوْهِبَةِ اللهِ اللي فِيكَ لما حطيت يَدَيَّ عَلَيْكَ.",
+        "لان اللهَ ما أعطانا رُوحَ الْجُبْنِ لكن رُوحَ الْقُوَّةِ وَالْمَحَبَّةِ وَالْبَصِيرَةِ.",
+        "علشان كدة لاتخجل بِالشَّهَادَةِ لِرَبِّنَا، وَلا تَخْجَلْ مني أَنَا اللي اتسجنت علشانه، لكن شَارِكْنِي التعب لأَجْلِ الإِنْجِيلِ، واتوكل عَلَى قوة اللهِ.",
+        "لانه هو اللي خَلَّصَنَا، وَدَعَانَا ليه دَعْوَةً مُقَدَّسَةً، مو علشان أَعْمَالِنَا، لكن علشان قَصْدِهِ وَنِعْمَتِهِ اللي أدّاها لنا فِي الْمَسِيحِ يَسُوعَ من بداية الزمن،",
+        "وَاللي ظهرت الآنَ بِظُهُورِ مُخَلِّصِنَا يَسُوعَ الْمَسِيحِ اللي سَحَقَ الْمَوْتَ ونور الْحَيَاةَ وَالْخُلُودَ بِالإِنْجِيلِ",
+        "اللي اتعُيِّنْتُ أَنَا له مُبَشِّر وَرَسُول وَمُعَلِّمً.",
+        "وعلشان كدة كمان أُقَاسِي الآنَ هاذي الآلامَ، وَلَكِنِّ ماراح أخجل، علشان انا اعرف مين الي أنا مُؤْمِنٌ بِهِ، وواثق تماماِ بِأَنَّهُ قَادِرٌ يَحْفَظَ لِي الأَمَانَةَ اللي أَوْدَعْتُهَا عِنْدَهُ سَالِمَةً إلين ذاك الْيَوْمِ.",
+        "اعتبر الْكَلامِ الصَّحِيحِ اللي سَمِعْتَهُ مِنِّي مِثَال فِي الإِيمَانِ وَالْمَحَبَّةِ اللي فِي الْمَسِيحِ يَسُوعَ.",
+        "حَافِظْ عَلَى الأَمَانَةِ الْكَرِيمَةِ اللي اتودعت عندك، بِالرُّوحِ الْقُدُسِ اللي حل فِينَا.",
+        "أَنْتَ عارف أَنَّ كُلَّ اللي فِي مُقَاطَعَةِ أَسِيَّا، وَمِنْهُمْ فِيجَلُّسُ وَهَرْمُوجِينِسُ، اتَخَلَّوْا عَنِّي.",
+        "الرَّبُّ يرحم عَايلَةَ أُونِيسِيفُورُسَ، كتير ريحني، وماخجل من قُيُودِي،",
+        "بالعكس كَانَ فِي مَدِينَةِ رُومَا، بَذَلَ مجهود إلين ما لقيني.",
+        "الرَّبُّ ينعم عليه بِالرَّحْمَةَ مِنَ عنده فِي الْيَوْمِ دة! أمَّا كُلُّ اللي خَدَمَنِي بِهِ فِي مَدِينَةِ أَفَسُسَ، فَأَنْتَ تَعْرِفُهُ كويس."
+      ]
+    }
   }
 ];
 

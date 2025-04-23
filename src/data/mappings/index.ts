@@ -9,6 +9,7 @@ import { lostPhoneMappings } from './the-lost-phone';
 import { threeLittlePigsMappings } from './the-three-little-pigs';
 import { storyOfAdamMappings } from './story-of-adam';
 import { storyOfJesusMappings } from './story-of-jesus';
+import { secondTimothyMappings } from './2nd-timothy-1';
 
 // Story IDs defined as constants to avoid typos
 export const STORY_IDS = {
@@ -17,6 +18,7 @@ export const STORY_IDS = {
   THREE_LITTLE_PIGS: 'three-little-pigs',
   STORY_OF_ADAM: 'story-of-adam',
   STORY_OF_JESUS: 'story-of-jesus',
+  SECOND_TIMOTHY: '2nd-timothy-1',
 } as const;
 
 // Type for story IDs
@@ -29,6 +31,7 @@ const storyMappings: Record<StoryId, Record<string, string>> = {
   [STORY_IDS.THREE_LITTLE_PIGS]: threeLittlePigsMappings,
   [STORY_IDS.STORY_OF_ADAM]: storyOfAdamMappings,
   [STORY_IDS.STORY_OF_JESUS]: storyOfJesusMappings,
+  [STORY_IDS.SECOND_TIMOTHY]: secondTimothyMappings,
 };
 
 /**
@@ -72,5 +75,6 @@ export {
   lostPhoneMappings,
   threeLittlePigsMappings,
   storyOfAdamMappings,
-  storyOfJesusMappings 
+  storyOfJesusMappings,
+  secondTimothyMappings
 }; 
