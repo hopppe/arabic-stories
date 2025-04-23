@@ -49,20 +49,12 @@ export const Layout: React.FC<LayoutProps> = ({
                 <li><a href="/about">About</a></li>
               </ul>
             </div>
-            <div className={styles.footerLinkColumn}>
-              <h3 className={styles.footerLinkHeading}>Resources</h3>
-              <ul className={styles.footerLinkList}>
-                <li><a href="/faq">FAQ</a></li>
-                <li><a href="/contact">Contact</a></li>
-                <li><a href="/privacy">Privacy</a></li>
-              </ul>
-            </div>
           </div>
         </div>
         <div className={styles.footerBottom}>
           <div className={styles.footerBottomContainer}>
             <p className={styles.copyright}>
-              &copy; {new Date().getFullYear()} Arabic Stories. All rights reserved.
+              &copy; {new Date().getFullYear()} Arabic Stories. All rights reserved. Made by Ethan Hoppe.
             </p>
           </div>
         </div>
