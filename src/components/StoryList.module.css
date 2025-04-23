@@ -1,0 +1,146 @@
+.storyListSection {
+  padding: var(--spacing-xl) 0;
+  width: 100%;
+}
+
+.storyListContainer {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--spacing-lg);
+}
+
+.sectionTitle {
+  font-size: var(--font-size-xlarge);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-sm);
+  letter-spacing: -0.02em;
+}
+
+.sectionSubtitle {
+  font-size: var(--font-size-medium);
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xl);
+  max-width: 650px;
+}
+
+.storyGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.storyCard {
+  background-color: var(--card-background);
+  border-radius: var(--border-radius-medium);
+  box-shadow: var(--shadow-medium);
+  overflow: hidden;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  text-decoration: none;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.storyCard:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-large);
+  text-decoration: none;
+}
+
+.storyContent {
+  padding: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.storyTitleWrapper {
+  margin-bottom: var(--spacing-md);
+}
+
+.storyTitle {
+  font-size: var(--font-size-medium);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+  line-height: 1.3;
+}
+
+.storyArabicTitle {
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 0;
+  line-height: 1.4;
+  direction: rtl;
+  text-align: right;
+}
+
+.storyPreview {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-base);
+  margin-bottom: var(--spacing-lg);
+  line-height: 1.6;
+  flex-grow: 1;
+}
+
+.storyMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  padding-top: var(--spacing-md);
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.paragraphCount {
+  font-size: var(--font-size-small);
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+}
+
+.readMoreLink {
+  color: var(--primary);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  transition: color 0.2s ease;
+}
+
+.readMoreLink:after {
+  content: "→";
+  margin-left: 6px;
+  transition: transform 0.2s ease;
+}
+
+.storyCard:hover .readMoreLink {
+  color: var(--highlight);
+}
+
+.storyCard:hover .readMoreLink:after {
+  transform: translateX(3px);
+}
+
+@media (max-width: 768px) {
+  .storyGrid {
+    grid-template-columns: 1fr;
+  }
+  
+  .sectionTitle {
+    font-size: var(--font-size-large);
+  }
+  
+  .sectionSubtitle {
+    font-size: var(--font-size-base);
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .storyGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+} 

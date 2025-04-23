@@ -1,0 +1,133 @@
+.container {
+  background-color: var(--card-background);
+  border-radius: var(--border-radius-medium);
+  box-shadow: var(--shadow-medium);
+  width: 100%;
+  max-width: 300px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--border);
+}
+
+.title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.clearButton {
+  background: transparent;
+  border: none;
+  color: var(--primary);
+  font-size: var(--font-size-small);
+  cursor: pointer;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius-small);
+  font-weight: 500;
+  transition: background-color 0.2s ease;
+}
+
+.clearButton:hover {
+  background-color: rgba(0, 113, 227, 0.05);
+}
+
+.wordsList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.wordItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  transition: background-color 0.2s ease;
+}
+
+.wordItem:last-child {
+  border-bottom: none;
+}
+
+.wordItem:hover {
+  background-color: rgba(0, 0, 0, 0.01);
+}
+
+.wordContent {
+  display: flex;
+  flex-direction: column;
+}
+
+.arabicWord {
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+  direction: rtl;
+  text-align: right;
+}
+
+.englishWord {
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+.removeButton {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-medium);
+  width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  padding: 0;
+  line-height: 1;
+}
+
+.removeButton:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: var(--error);
+}
+
+.emptyContainer {
+  background-color: var(--card-background);
+  border-radius: var(--border-radius-medium);
+  box-shadow: var(--shadow-medium);
+  width: 100%;
+  max-width: 300px;
+  padding: var(--spacing-lg);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.emptyMessage {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-small);
+  line-height: 1.5;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .container, .emptyContainer {
+    max-width: 100%;
+  }
+} 

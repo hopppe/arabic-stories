@@ -1,0 +1,121 @@
+/**
+ * Word mappings for "The Story of Jesus" 
+ * Maps Arabic words to their English translations
+ */
+
+export const storyOfJesusMappings: Record<string, string> = {
+  // The Annunciation
+  "في": "in",
+  "زمان": "time",
+  "قديم": "old / ancient",
+  "الله": "God",
+  "أرسل": "sent",
+  "ملاك": "an angel",
+  "لمريم": "to Mary",
+  "الملاك": "the angel",
+  "قال لها": "said to her",
+  "أنتِ": "you (feminine)",
+  "مباركة": "blessed",
+  "والله": "and God",
+  "اختارك": "chose you",
+  "راح": "will",
+  "تولدي": "give birth",
+  "ولد": "a boy",
+  "وتسميه": "and you will name him",
+  "يسوع": "Jesus",
+  "هو": "he",
+  "بيكون": "will be",
+  "ابن الله": "the Son of God",
+  
+  // Mary's Response
+  "مريم": "Mary",
+  "استغربت": "was surprised",
+  "وقالت": "and said",
+  "كيف": "how",
+  "يصير": "can it be",
+  "كده": "like this",
+  "الروح القدس": "the Holy Spirit",
+  "بيجي": "will come",
+  "عليك": "upon you",
+  "قوة الله": "the power of God",
+  "تغطيك": "will cover you",
+  "عشان كده": "that's why",
+  "المولود": "the baby",
+  "قدوس": "holy",
+  "آمنت": "she believed",
+  "بكلام": "in the words",
+  
+  // Birth of Jesus
+  "بعد وقت": "after a while",
+  "سافرت": "she traveled",
+  "مع يوسف": "with Joseph",
+  "لبيت لحم": "to Bethlehem",
+  "هناك": "there",
+  "اتولد": "was born",
+  "في مزود بسيط": "in a simple manger",
+  "لأن": "because",
+  "ما كان فيه": "there was no",
+  "مكان": "place",
+  "في الفندق": "in the inn",
+  
+  // Shepherds
+  "رعاة": "shepherds",
+  "في الحقل": "in the field",
+  "شافوا": "saw",
+  "قال لهم": "said to them",
+  "اتولد لكم": "born for you",
+  "مخلّص": "a Savior",
+  "هو المسيح": "he is the Christ",
+  "وجم": "and they came",
+  "يشوفوا": "to see",
+  "الطفل": "the child",
+  "وفرحوا": "and they rejoiced",
+  "كثير": "a lot",
+  
+  // Ministry of Jesus
+  "كبر": "grew up",
+  "وصار": "and became",
+  "يعلّم": "teaching",
+  "الناس": "the people",
+  "عن محبة الله": "about the love of God",
+  "شفى": "he healed",
+  "المرضى": "the sick",
+  "وغفر": "and forgave",
+  "الخطايا": "the sins",
+  "وعمل": "and did",
+  "معجزات كثيرة": "many miracles",
+  
+  // Crucifixion
+  "بعدين": "then",
+  "ناس كثير": "many people",
+  "ما عجبهم": "didn't like",
+  "كلامه": "his words",
+  "فمسكوه": "so they seized him",
+  "وصلبوه": "and crucified him",
+  "على خشبة": "on a cross",
+  "مات": "he died",
+  "واندفن": "and was buried",
+  "في قبر": "in a tomb",
+  
+  // Resurrection
+  "لكن": "but",
+  "بعد ثلاثة أيام": "after three days",
+  "قام من الموت": "he rose from the dead",
+  "ظهر": "appeared",
+  "لتلاميذه": "to his disciples",
+  "وقال لهم": "and said to them",
+  "أنا حي": "I am alive",
+  "وروحوا": "and go",
+  "علّموا": "teach",
+  "كل الناس": "all the people",
+  "عني": "about me",
+  
+  // Conclusion
+  "هذا هو": "this is",
+  "المخلّص": "the Savior",
+  "اللي": "who",
+  "يحب": "loves",
+  "وجاء": "and came",
+  "يعطيهم": "to give them",
+  "حياة أبدية": "eternal life"
+}; 

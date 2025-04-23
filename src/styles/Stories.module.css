@@ -1,0 +1,42 @@
+.storiesPage {
+  width: 100%;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--spacing-lg);
+}
+
+.heroSection {
+  padding: var(--spacing-xl) 0;
+  background: linear-gradient(180deg, rgba(0, 113, 227, 0.05) 0%, rgba(245, 245, 247, 0) 100%);
+  margin-bottom: var(--spacing-lg);
+  text-align: center;
+}
+
+.pageTitle {
+  font-size: var(--font-size-xxlarge);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-md);
+  letter-spacing: -0.02em;
+}
+
+.pageDescription {
+  font-size: var(--font-size-medium);
+  color: var(--text-secondary);
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .pageTitle {
+    font-size: var(--font-size-xlarge);
+  }
+  
+  .pageDescription {
+    font-size: var(--font-size-base);
+  }
+} 
