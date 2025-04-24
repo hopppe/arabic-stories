@@ -3,10 +3,11 @@ import { Story } from '../types/Story';
 import { getWordMappingsForStory } from '../data/mappings';
 import { splitArabicText } from '../data/stories';
 import { LearnedWordsList, LearnedWord } from './LearnedWordsList';
+import { UserStory } from '../lib/supabase';
 import styles from './StoryView.module.css';
 
 interface StoryViewProps {
-  story: Story;
+  story: Story | UserStory;
 }
 
 // Define a token object that represents either a word or punctuation in the text
@@ -26,8 +27,14 @@ export const StoryView: React.FC<StoryViewProps> = ({ story }) => {
   const [clickedPhrases, setClickedPhrases] = useState<Set<string>>(new Set());
   
   useEffect(() => {
-    const storyMappings = getWordMappingsForStory(story.id);
-    setMappings(storyMappings);
+    // Check if story is a UserStory with word_mappings
+    if ('word_mappings' in story && story.word_mappings) {
+      setMappings(story.word_mappings);
+    } else {
+      // Fall back to built-in mappings
+      const storyMappings = getWordMappingsForStory(story.id);
+      setMappings(storyMappings);
+    }
     
     // Load learned words from localStorage
     const savedWords = localStorage.getItem(`learnedWords-${story.id}`);
@@ -36,7 +43,7 @@ export const StoryView: React.FC<StoryViewProps> = ({ story }) => {
       setLearnedWords(parsedWords);
       setClickedPhrases(new Set(parsedWords.map(word => word.arabic)));
     }
-  }, [story.id]);
+  }, [story]);
   
   // Save learned words to localStorage when updated
   useEffect(() => {

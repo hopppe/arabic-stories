@@ -73,18 +73,6 @@ const Home = () => {
       </section>
       
       <StoryList />
-      
-      <section className={styles.cta}>
-        <div className={styles.ctaContainer}>
-          <h2 className={styles.ctaTitle}>Ready to start learning?</h2>
-          <p className={styles.ctaSubtitle}>
-            Explore our collection of Arabic stories and improve your vocabulary today
-          </p>
-          <Link href="/stories" className={styles.ctaButton}>
-            Get Started
-          </Link>
-        </div>
-      </section>
     </Layout>
   );
 };

@@ -35,12 +35,54 @@
   margin-bottom: var(--spacing-lg);
 }
 
+.sectionTitle {
+  font-size: var(--font-size-large);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: var(--spacing-xl);
+  margin-bottom: var(--spacing-md);
+}
+
+.subSectionTitle {
+  font-size: var(--font-size-medium);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
+}
+
+.featureList, .instructionList {
+  margin-left: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+}
+
+.featureList li, .instructionList li {
+  margin-bottom: var(--spacing-sm);
+  line-height: 1.5;
+}
+
+.instructionList {
+  counter-reset: item;
+}
+
+.instructionList li {
+  padding-left: var(--spacing-md);
+}
+
 @media (max-width: 768px) {
   .pageTitle {
     font-size: var(--font-size-xlarge);
   }
   
   .pageDescription {
+    font-size: var(--font-size-base);
+  }
+  
+  .sectionTitle {
+    font-size: var(--font-size-medium);
+  }
+  
+  .subSectionTitle {
     font-size: var(--font-size-base);
   }
 } 

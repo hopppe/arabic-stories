@@ -19,7 +19,18 @@ const StoriesPage = () => {
           </div>
         </div>
         
-        <StoryList />
+        {/* Display user-generated stories first */}
+        <StoryList 
+          showUserStories={true} 
+          title="Your Created Stories" 
+          subtitle="Stories you've created with your chosen vocabulary words"
+        />
+        
+        {/* Display built-in stories */}
+        <StoryList 
+          title="Featured Stories" 
+          subtitle="Learn Arabic through our collection of engaging stories"
+        />
       </div>
     </Layout>
   );

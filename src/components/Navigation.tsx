@@ -41,9 +41,15 @@ export const Navigation: React.FC = () => {
           </Link>
           <Link 
             href="/stories" 
-            className={`${styles.navLink} ${router.pathname.includes('/stories') ? styles.active : ''}`}
+            className={`${styles.navLink} ${router.pathname.includes('/stories') && !router.pathname.includes('/stories/create') ? styles.active : ''}`}
           >
             Stories
+          </Link>
+          <Link 
+            href="/stories/create" 
+            className={`${styles.navLink} ${router.pathname === '/stories/create' ? styles.active : ''}`}
+          >
+            Create Story
           </Link>
           <Link 
             href="/about" 
