@@ -5,10 +5,7 @@
 
 export const threeLittlePigsMappings: Record<string, string> = {
   // First paragraph
-  "كان": "was",
-  "يا": "upon",
-  "ما": "a",
-  "كان": "time",
+  "كان يا ما كان": "once upon a time",
   "هناك": "there were",
   "ثلاثة": "three",
   "خنازير": "pigs",
@@ -26,8 +23,7 @@ export const threeLittlePigsMappings: Record<string, string> = {
   "بيتا": "a house",
   "من": "of",
   "القش": "straw",
-  "لأنه": "because it",
-  "كان": "was",
+  "لأنه كان": "because it was",
   "سهلا": "easy",
   "وسريعا": "and quick",
   
@@ -76,8 +72,7 @@ export const threeLittlePigsMappings: Record<string, string> = {
   "الطوبي": "brick",
   
   // Eighth paragraph
-  "حاول": "tried",
-  "أن": "to",
+  "حاول أن": "tried to",
   "يهدم": "blow down",
   "لكنه": "but it",
   "جدا": "very/too",
