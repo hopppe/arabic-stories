@@ -2,7 +2,10 @@
 
 :root {
   --primary: #0071e3;
+  --primary-dark: #0062c9;
+  --primary-light: #4a9cf5;
   --background: #f5f5f7;
+  --background-alt: #f0f0f2;
   --card-background: #ffffff;
   --text-primary: #1d1d1f;
   --text-secondary: #6e6e73;
@@ -10,6 +13,7 @@
   --text-inverse: #ffffff;
   --text-link: #0066cc;
   --border: #d2d2d7;
+  --border-light: #e5e5e7;
   --success: #34c759;
   --error: #ff3b30;
   --warning: #ff9500;
@@ -46,6 +50,7 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html,
@@ -59,6 +64,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   width: 100%;
   overflow-x: hidden;
+  text-size-adjust: 100%;
 }
 
 /* Add viewport meta tag to ensure proper mobile rendering */
@@ -72,10 +78,17 @@ head::after {
     touch-action: manipulation; /* Prevents delay on touch devices */
   }
   
+  /* Ensure readable text size on mobile */
+  html, body {
+    font-size: 16px; /* Minimum 16px font size for readability */
+  }
+  
   /* Increase touch targets on mobile */
-  a, button, .button, [role="button"] {
+  a, button, .button, [role="button"], select, input[type="button"], 
+  input[type="submit"], input[type="reset"] {
     min-height: var(--touch-target);
     min-width: var(--touch-target);
+    padding: 12px 16px;
   }
   
   /* Adjust font sizes for mobile */
@@ -86,6 +99,11 @@ head::after {
   /* Remove hover effects on touch devices */
   a:hover, button:hover, .button:hover {
     transition: none;
+  }
+  
+  /* Improve tap targets spacing */
+  li, nav a, .nav-item {
+    padding: 8px 0;
   }
 }
 
@@ -182,15 +200,34 @@ button:active, .button:active {
     font-size: var(--font-size-large);
   }
   
+  h3 {
+    font-size: var(--font-size-medium);
+  }
+  
   /* Improve button touch areas on mobile */
   button, .button {
     padding: var(--spacing-sm) var(--spacing-lg);
     min-height: 44px; /* Apple's minimum touch target size */
+    width: 100%;
   }
   
   /* Adjust container padding for mobile */
   .container {
-    padding: 0 var(--spacing-sm);
+    padding: 0 var(--spacing-md);
+  }
+  
+  /* Make sure images don't overflow their containers */
+  img {
+    max-width: 100%;
+    height: auto;
+  }
+  
+  /* Improve form controls */
+  input, select, textarea {
+    font-size: 16px; /* Prevents iOS zoom on focus */
+    min-height: 44px;
+    padding: 12px;
+    width: 100%;
   }
 }
 
@@ -205,4 +242,27 @@ hr {
 :focus {
   outline: 2px solid var(--highlight);
   outline-offset: 2px;
+}
+
+/* Better mobile form inputs */
+input, select, textarea {
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  color: var(--text-primary);
+  background-color: var(--card-background);
+  border: 1px solid var(--border);
+  border-radius: var(--border-radius-small);
+  padding: 8px 12px;
+  transition: border-color 0.2s ease;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+/* Properly sized buttons for touch */
+.btn, button, [type="button"], [type="submit"], [type="reset"] {
+  min-height: var(--touch-target);
+  min-width: var(--touch-target);
 } 

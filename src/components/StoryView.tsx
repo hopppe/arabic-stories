@@ -30,9 +30,13 @@ export const StoryView: React.FC<StoryViewProps> = ({ story }) => {
   const [clickedPhrases, setClickedPhrases] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   
   // Check if the story is a user-created story
   const isUserStory = 'user_id' in story;
+  
+  // Check if current user is the creator of the story
+  const isStoryCreator = isUserStory && story.user_id === currentUserId;
   
   // Add a ref for tooltip positioning
   const tooltipRef = useRef<HTMLSpanElement | null>(null);
@@ -78,6 +82,21 @@ export const StoryView: React.FC<StoryViewProps> = ({ story }) => {
       setClickedPhrases(new Set(parsedWords.map(word => word.arabic)));
     }
   }, [story]);
+  
+  useEffect(() => {
+    // Get current user ID from Supabase
+    const fetchCurrentUser = async () => {
+      const supabase = getSupabase();
+      if (!supabase) return;
+      
+      const { data: session } = await supabase.auth.getSession();
+      if (session?.session?.user) {
+        setCurrentUserId(session.session.user.id);
+      }
+    };
+    
+    fetchCurrentUser();
+  }, []);
   
   // Save learned words to localStorage when updated
   useEffect(() => {
@@ -263,7 +282,7 @@ export const StoryView: React.FC<StoryViewProps> = ({ story }) => {
   
   // Function to handle story deletion
   const handleDeleteStory = async () => {
-    if (!isUserStory) return;
+    if (!isUserStory || !isStoryCreator) return;
     
     // Confirm deletion
     if (!window.confirm('Are you sure you want to delete this story? This action cannot be undone.')) {
@@ -286,6 +305,11 @@ export const StoryView: React.FC<StoryViewProps> = ({ story }) => {
       
       if (!session.session) {
         throw new Error('User not authenticated, please sign in again');
+      }
+      
+      // Verify user is the creator of the story
+      if (session.session.user.id !== story.user_id) {
+        throw new Error('You do not have permission to delete this story');
       }
       
       console.log('Deleting story with ID:', story.id);
@@ -324,7 +348,7 @@ export const StoryView: React.FC<StoryViewProps> = ({ story }) => {
           <h2 className={styles.storyArabicTitle}>{story.title.arabic}</h2>
         </div>
         <div className={styles.storyActions}>
-          {isUserStory && (
+          {isStoryCreator && (
             <button 
               className={styles.deleteStoryButton}
               onClick={handleDeleteStory}

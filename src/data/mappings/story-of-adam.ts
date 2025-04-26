@@ -4,95 +4,92 @@
  */
 
 export const storyOfAdamMappings: Record<string, string> = {
-  // Creation of Adam
-  "في": "in",
-  "بداية": "beginning",
-  "الخلق": "the creation",
+  // First paragraph
+  "في بداية": "in the beginning",
+  "الخلق": "of creation",
   "خلق": "created",
-  "الله": "Allah (God)",
+  "الله": "Allah",
   "آدم": "Adam",
   "من": "from",
   "طين": "clay",
-  
-  "ونفخ": "and He breathed",
+  "ونفخ": "and breathed",
   "فيه": "into him",
   "روحه": "His Spirit",
   "فصار": "so he became",
-  "إنسانًا": "a human",
+  "إنسانًا": "human",
   
-  // Teaching Adam
-  "علّمه": "He taught him",
+  // Second paragraph
+  "علّم": "taught",
   "الأسماء": "the names",
   "كلها": "all of them",
-  "ثم أمر": "then He commanded",
-  "أمر": "He commanded",
+  "ثم": "then",
+  "أمر": "commanded",
   "الملائكة": "the angels",
   "أن": "to",
   "يسجدوا": "prostrate",
   "له": "to him",
-  
-  // Iblis's rebellion
   "سجدوا": "they prostrated",
   "كلهم": "all of them",
   "إلا": "except",
   "إبليس": "Iblis (Satan)",
-  "تكبر": "he became arrogant",
+  
+  // Third paragraph
+  "تكبر": "became arrogant",
   "وقال": "and said",
-  "أنا": "I",
+  "أنا": "I am",
   "خير": "better",
   "منه": "than him",
   "خلقتني": "You created me",
-  "من نار": "from fire",
+  "نار": "fire",
   "وخلقته": "and created him",
-  "من طين": "from clay",
   
-  // God's anger and Adam's dwelling
+  // Fourth paragraph
   "غضب": "was angry",
-  "على": "at",
+  "على": "with",
   "وطرده": "and expelled him",
-  "من رحمته": "from His mercy",
-  
-  "ثم أسكن": "then He made to live",
-  "أسكن": "He made to live",
+  "رحمته": "His mercy",
+  "أسكن": "made live",
   "في الجنة": "in Paradise",
-  "وخلق له": "and He created for him",
+  "وخلق": "and created",
   "زوجته": "his wife",
   "حواء": "Eve",
   "ليعيش": "to live",
   "معها": "with her",
   
-  // The test and disobedience
-  "قال": "He said",
-  "لهما": "to them both",
-  "كلا": "eat (dual)",
-  "من الجنة": "from the Paradise",
+  // Fifth paragraph
+  "قال": "said",
+  "لهما": "to them",
+  "كلا": "eat",
   "كما": "as",
   "تشاءان": "you wish",
   "لكن": "but",
-  "لا تقربا": "do not go near (dual)",
-  "هذه الشجرة": "this tree",
-  
+  "لا": "do not",
+  "تقربا": "approach",
+  "هذه": "this",
+  "الشجرة": "tree",
   "ولكن": "but",
   "وسوس": "whispered",
   "فأكلا": "so they ate",
-  "من الشجرة": "from the tree",
-  "فعصيا": "so they disobeyed",
+  "فعصيا": "they disobeyed",
   
-  // Descent to Earth and repentance
+  // Sixth paragraph
   "فأنزلهما": "so He sent them down",
-  "إلى الأرض": "to the earth",
-  "وقال لهما": "and said to them",
-  "عيشوا فيها": "live in it",
-  "وتوبوا إليّ": "and repent to Me",
+  "إلى": "to",
+  "الأرض": "earth",
+  "عيشوا": "live",
+  "فيها": "in it",
+  "وتوبوا": "and repent",
+  "إليّ": "to Me",
+  "فتاب": "repented",
+  "وغفر": "and forgave",
   
-  "فتاب": "so he repented",
-  "وغفر الله له": "and Allah forgave him",
-  
-  // Conclusion
-  "كان أول": "was the first",
-  "أول إنسان": "the first human",
-  "وأول نبي": "and the first prophet",
+  // Seventh paragraph
+  "كان": "was",
+  "أول": "first",
+  "إنسان": "human",
+  "نبي": "prophet",
   "ومنه": "and from him",
   "بدأت": "began",
-  "حياة البشر": "the life of mankind"
+  "حياة": "life",
+  "البشر": "of mankind"
 }; 

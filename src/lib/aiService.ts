@@ -1,7 +1,9 @@
 interface StoryGenerationParams {
-  difficulty: 'simple' | 'easy' | 'normal';
+  difficulty: 'simple' | 'easy' | 'normal' | 'advanced';
   dialect: 'hijazi' | 'saudi' | 'jordanian' | 'egyptian';
-  words: string[];
+  words: string[] | [];
+  topic?: string;
+  longStory?: boolean;
 }
 
 interface AIResponse {

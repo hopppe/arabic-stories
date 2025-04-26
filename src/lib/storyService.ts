@@ -1,10 +1,12 @@
-import { getSupabase, UserStory } from './supabase';
+import { getSupabase, UserStory, refreshSupabaseClient } from './supabase';
 import { generateArabicStory, prepareStoryContent } from './aiService';
 
 interface StoryCreationParams {
-  difficulty: 'simple' | 'easy' | 'normal';
+  difficulty: 'simple' | 'easy' | 'normal' | 'advanced';
   dialect: 'hijazi' | 'saudi' | 'jordanian' | 'egyptian';
-  words: string[];
+  words: string[] | [];
+  topic?: string;
+  longStory?: boolean;
   userId?: string;
 }
 
@@ -19,12 +21,23 @@ export async function generateStory(params: StoryCreationParams): Promise<UserSt
     console.log('generateStory - Starting with params:', {
       difficulty: params.difficulty,
       dialect: params.dialect,
-      wordCount: params.words.length,
-      userId: params.userId ? '[PRESENT]' : '[NOT PROVIDED]'
+      wordCount: params.words ? params.words.length : 0,
+      userId: params.userId ? '[PRESENT]' : '[NOT PROVIDED]',
+      longStory: params.longStory || false,
+      topic: params.topic ? 'Present' : 'Not provided'
     });
     
+    // Ensure words is always an array
+    const words = params.words || [];
+    
     // Use the AI service to generate the story and translations
-    const aiResponse = await generateArabicStory(params);
+    const aiResponse = await generateArabicStory({
+      difficulty: params.difficulty,
+      dialect: params.dialect,
+      words: words,
+      topic: params.topic,
+      longStory: params.longStory
+    });
     
     console.log('generateStory - AI response received, processing data...');
     
@@ -34,7 +47,7 @@ export async function generateStory(params: StoryCreationParams): Promise<UserSt
     // Use the sentence-by-sentence translations from the AI
     const englishParagraphs = aiResponse.translation || [];
     
-    // Create the story object
+    // Create the story object - using known database compatible fields
     const storyData: UserStory = {
       id,
       title: {
@@ -48,9 +61,7 @@ export async function generateStory(params: StoryCreationParams): Promise<UserSt
       difficulty: params.difficulty,
       dialect: params.dialect,
       created_at: new Date().toISOString(),
-      // Add user_id if provided
       user_id: params.userId,
-      // Use the glossary provided by the AI
       word_mappings: aiResponse.gloss || {}
     };
     
@@ -69,7 +80,7 @@ export async function generateStory(params: StoryCreationParams): Promise<UserSt
 /**
  * Validate story data to ensure it can be saved properly
  */
-function validateStoryData(story: UserStory): void {
+function validateStoryData(story: any): void {  // Use 'any' to allow longStory which won't be in UserStory
   // Check required fields
   if (!story.id) {
     throw new Error('Story ID is missing');
@@ -107,7 +118,8 @@ function validateStoryData(story: UserStory): void {
     throw new Error('Invalid dialect');
   }
   
-  if (!['simple', 'easy', 'normal'].includes(story.difficulty)) {
+  // Check if difficulty is valid, including 'advanced'
+  if (!['simple', 'easy', 'normal', 'advanced'].includes(story.difficulty)) {
     throw new Error('Invalid difficulty level');
   }
   
@@ -115,6 +127,9 @@ function validateStoryData(story: UserStory): void {
   if (story.word_mappings && typeof story.word_mappings !== 'object') {
     story.word_mappings = {}; // Reset to empty object if invalid
   }
+  
+  // Remove any longStory property as it's not stored in the database
+  delete story.longStory;
   
   console.log('Story data validated successfully');
 }
@@ -126,8 +141,16 @@ export async function saveUserStory(story: UserStory): Promise<void> {
   console.log('==== STORY SAVING DEBUG ====');
   console.log('1. saveUserStory called with story ID:', story.id);
   
+  // Double-check story structure validity before attempting to save
   try {
-    // Step 1: Initialize Supabase
+    // Remove any longStory property that may have been passed
+    const storyCopy = { ...story };
+    if ('longStory' in storyCopy) {
+      console.log('Removing longStory property from data before saving');
+      delete (storyCopy as any).longStory;
+    }
+    
+    // Step 1: Get fresh Supabase client but don't force refresh
     console.log('2. Getting Supabase client');
     const supabase = getSupabase();
     if (!supabase) {
@@ -136,64 +159,64 @@ export async function saveUserStory(story: UserStory): Promise<void> {
     }
     console.log('3. Supabase client obtained successfully');
     
-    // Step 2: Verify authentication
-    console.log('4. Checking authentication session');
+    // Step 2: Simple session check - just get user ID from session if available
+    console.log('4. Getting user ID from current session');
+    let authenticatedUserId = story.user_id; // Default to story user_id
+    
     try {
-      const { data: session, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError) {
-        console.error('5. ERROR: Failed to get session:', sessionError);
-        throw new Error(`Authentication session error: ${sessionError.message}`);
-      }
-      
-      if (!session.session) {
-        console.error('5. ERROR: No active session found');
-        throw new Error('User not authenticated, please sign in again');
-      }
-      
-      console.log('5. User authenticated successfully');
-      
-      // Step 3: Set user ID
-      const authenticatedUserId = session.session.user.id;
-      console.log('6. Authenticated user ID:', authenticatedUserId);
-      
-      // If story user_id doesn't match authenticated user, this is a problem
-      if (story.user_id && story.user_id !== authenticatedUserId) {
-        console.warn('7. WARNING: Story user_id does not match authenticated user, updating to correct user');
-        console.log({
-          storyUserId: story.user_id,
-          authUserId: authenticatedUserId
-        });
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session?.user?.id) {
+        authenticatedUserId = sessionData.session.user.id;
+        console.log('5. User ID from session:', authenticatedUserId);
       } else {
-        console.log('7. User IDs match or story user_id not set, will use auth user ID');
+        console.warn('5. No session found, using user_id from story object');
       }
-      
-      // Always use the authenticated user's ID to ensure proper permissions
-      const storyToSave = {
-        ...story,
-        user_id: authenticatedUserId
-      };
-      
-      // Step 4: Log story data
-      console.log('8. Preparing to save story with data:', { 
-        id: storyToSave.id,
-        user_id: storyToSave.user_id,
-        dialect: storyToSave.dialect,
-        difficulty: storyToSave.difficulty
-      });
-      
-      // Step 9: Insert data - GOING BACK TO THE ORIGINAL APPROACH THAT WORKED
-      console.log('9. Executing insert query with original approach (stringify)');
+    } catch (sessionError) {
+      // Continue with the user_id from story even if session check fails
+      console.warn('5. Session check failed, using user_id from story object', sessionError);
+    }
+    
+    // Always ensure we have a user_id
+    if (!authenticatedUserId) {
+      console.error('6. ERROR: No user ID available');
+      throw new Error('User ID is required to save a story');
+    }
+    
+    // Always use the authenticated user's ID to ensure proper permissions
+    const storyToSave = {
+      ...storyCopy,
+      user_id: authenticatedUserId
+    };
+    
+    // Step 3: Insert data - simple approach with one retry
+    console.log('7. Preparing to save story with data:', { 
+      id: storyToSave.id,
+      user_id: storyToSave.user_id,
+      dialect: storyToSave.dialect,
+      difficulty: storyToSave.difficulty
+    });
+    
+    // Convert nested objects to strings
+    const storyWithStringifiedFields = {
+      id: storyToSave.id,
+      title: JSON.stringify(storyToSave.title),
+      content: JSON.stringify(storyToSave.content),
+      word_mappings: JSON.stringify(storyToSave.word_mappings || {}),
+      difficulty: storyToSave.difficulty,
+      dialect: storyToSave.dialect,
+      created_at: storyToSave.created_at,
+      user_id: storyToSave.user_id
+    };
+    
+    console.log('8. Fields stringified and ready for insert');
+    
+    // Insert with only one retry for simplicity
+    let insertAttempts = 0;
+    const maxInsertAttempts = 2;
+    
+    while (insertAttempts < maxInsertAttempts) {
       try {
-        // Convert nested objects to strings - THIS APPROACH WORKED BEFORE
-        const storyWithStringifiedFields = {
-          ...storyToSave,
-          title: JSON.stringify(storyToSave.title),
-          content: JSON.stringify(storyToSave.content),
-          word_mappings: JSON.stringify(storyToSave.word_mappings || {})
-        };
-        
-        console.log('9.1 Fields stringified and ready for insert');
+        console.log(`9. Executing insert query (attempt ${insertAttempts + 1}/${maxInsertAttempts})`);
         
         const { data, error } = await supabase
           .from('user_stories')
@@ -202,28 +225,54 @@ export async function saveUserStory(story: UserStory): Promise<void> {
           .single();
           
         if (error) {
-          console.error('10. ERROR: Insert query failed:', {
+          console.error(`10. Insert error on attempt ${insertAttempts + 1}:`, {
             code: error.code,
             message: error.message,
-            details: error.details,
-            hint: error.hint
+            details: error.details
           });
+          
+          insertAttempts++;
+          
+          // Handle specific errors but don't overthink it
+          if (error.code === '23505') {
+            throw new Error('A story with this ID already exists. Please try again.');
+          } else if (insertAttempts < maxInsertAttempts) {
+            // For any other error, just retry once more
+            console.log('Retrying insert...');
+            await new Promise(resolve => setTimeout(resolve, 500));
+            continue;
+          }
+          
           throw error;
         }
         
-        console.log('10. Story saved successfully:', data);
-      } catch (insertError) {
-        console.error('9.5 Insert operation error:', insertError);
-        throw insertError;
+        // Success!
+        console.log('10. Story saved successfully:', {
+          id: data?.id,
+          user_id: data?.user_id,
+          originalId: storyToSave.id
+        });
+        return;
+        
+      } catch (insertError: any) {
+        if (insertError.message.includes('already exists') || insertAttempts >= maxInsertAttempts - 1) {
+          throw insertError; // Don't retry duplicate key errors or if we've tried enough
+        }
+        
+        console.error(`Insert operation error on attempt ${insertAttempts + 1}:`, insertError);
+        insertAttempts++;
+        
+        // Simple retry with delay
+        console.log('Retrying insert...');
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
-      
-    } catch (innerError) {
-      console.error('Inner try-catch error:', innerError);
-      throw innerError;
     }
+    
   } catch (error) {
     console.error('==== STORY SAVING ERROR ====');
     console.error('Error saving story to Supabase:', error);
+    
+    // Provide clear error message for user
     if (error instanceof Error) {
       throw new Error(`Failed to save story: ${error.message}. Please try again.`);
     } else {
@@ -235,105 +284,241 @@ export async function saveUserStory(story: UserStory): Promise<void> {
 /**
  * Fetch all user-generated stories from Supabase
  */
-export async function getUserStories(): Promise<UserStory[]> {
-  try {
-    const supabase = getSupabase();
-    if (!supabase) {
-      return []; // Return empty array if client not initialized (e.g., during SSR)
-    }
-    
-    const { data, error } = await supabase
-      .from('user_stories')
-      .select('*')
-      .order('created_at', { ascending: false });
+export async function getUserStories(maxRetries = 3): Promise<UserStory[]> {
+  let retryCount = 0;
+  let lastError: any = null;
+  
+  while (retryCount <= maxRetries) {
+    try {
+      // Force a fresh client on each retry
+      if (retryCount > 0) {
+        console.log(`Retry ${retryCount}/${maxRetries}: Refreshing Supabase client`);
+        refreshSupabaseClient();
+        await new Promise(resolve => setTimeout(resolve, 500 * retryCount)); // Increasing backoff
+      }
       
-    if (error) throw error;
-    
-    // Normalize each story's data structure
-    return (data || []).map(storyData => normalizeStoryData(storyData));
-  } catch (error) {
-    console.error('Error fetching user stories:', error);
-    throw new Error('Failed to load user stories. Please try again.');
+      const supabase = getSupabase();
+      if (!supabase) {
+        if (retryCount < maxRetries) {
+          console.log(`Retry ${retryCount + 1}/${maxRetries}: Supabase client not initialized. Retrying...`);
+          retryCount++;
+          continue;
+        }
+        return []; // Return empty array after max retries
+      }
+      
+      // Verify session is active before querying
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session) {
+        if (retryCount < maxRetries) {
+          console.log(`Retry ${retryCount + 1}/${maxRetries}: No valid session. Refreshing connection...`);
+          retryCount++;
+          continue;
+        }
+        console.warn('No active session but returning public stories');
+        // Continue to query for public stories even without session
+      }
+      
+      const { data, error } = await supabase
+        .from('user_stories')
+        .select('*')
+        .order('created_at', { ascending: false });
+        
+      if (error) {
+        lastError = error;
+        if (retryCount < maxRetries) {
+          console.log(`Retry ${retryCount + 1}/${maxRetries}: Error fetching stories. Retrying...`);
+          retryCount++;
+          continue;
+        }
+        throw error;
+      }
+      
+      console.log(`Successfully fetched ${data?.length || 0} stories`);
+      
+      // Normalize each story's data structure
+      return (data || []).map(storyData => normalizeStoryData(storyData));
+    } catch (error) {
+      lastError = error;
+      if (retryCount < maxRetries) {
+        console.error(`Retry ${retryCount + 1}/${maxRetries}: Error in getUserStories:`, error);
+        retryCount++;
+        continue;
+      }
+      console.error('Final error fetching user stories:', error);
+      throw new Error('Failed to load user stories. Please try again.');
+    }
   }
+  
+  // This should never be reached due to the return/throw in the loop
+  console.error('Unexpected exit from retry loop with error:', lastError);
+  return [];
 }
 
 /**
  * Fetch stories created by a specific user from Supabase
  */
-export async function getUserCreatedStories(userId: string): Promise<UserStory[]> {
-  try {
-    console.log('getUserCreatedStories called with userId:', userId);
-    
-    const supabase = getSupabase();
-    if (!supabase) {
-      console.error('Supabase client not initialized in getUserCreatedStories');
-      return []; // Return empty array if client not initialized (e.g., during SSR)
-    }
-    
-    console.log('Executing query for user stories with user_id:', userId);
-    
-    // Get current auth session to log for debugging
-    const { data: sessionData } = await supabase.auth.getSession();
-    console.log('Current auth session user ID:', sessionData.session?.user?.id);
-    console.log('Do IDs match?', userId === sessionData.session?.user?.id);
-    
-    const { data, error } = await supabase
-      .from('user_stories')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+export async function getUserCreatedStories(userId: string, maxRetries = 3): Promise<UserStory[]> {
+  let retryCount = 0;
+  let lastError: any = null;
+  
+  while (retryCount <= maxRetries) {
+    try {
+      console.log(`Attempt ${retryCount + 1}: getUserCreatedStories called with userId:`, userId);
       
-    if (error) {
-      console.error('Supabase query error in getUserCreatedStories:', error);
-      throw error;
+      // Force a fresh client on each retry after the first attempt
+      if (retryCount > 0) {
+        console.log(`Retry ${retryCount}/${maxRetries}: Refreshing Supabase client`);
+        refreshSupabaseClient();
+        await new Promise(resolve => setTimeout(resolve, 500 * retryCount)); // Increasing backoff
+      }
+      
+      const supabase = getSupabase();
+      if (!supabase) {
+        console.error(`Attempt ${retryCount + 1}: Supabase client not initialized in getUserCreatedStories`);
+        if (retryCount < maxRetries) {
+          retryCount++;
+          continue;
+        }
+        return []; // Return empty array after max retries
+      }
+      
+      console.log('Executing query for user stories with user_id:', userId);
+      
+      // Get current auth session to log for debugging
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !sessionData.session) {
+        console.warn(`Attempt ${retryCount + 1}: No valid session found or session error`);
+        if (retryCount < maxRetries) {
+          retryCount++;
+          continue;
+        }
+        // If we've exhausted retries but still have no session, return empty
+        return [];
+      }
+      
+      console.log('Current auth session user ID:', sessionData.session?.user?.id);
+      console.log('Do IDs match?', userId === sessionData.session?.user?.id);
+      
+      const { data, error } = await supabase
+        .from('user_stories')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+        
+      if (error) {
+        console.error(`Attempt ${retryCount + 1}: Supabase query error in getUserCreatedStories:`, error);
+        lastError = error;
+        if (retryCount < maxRetries) {
+          retryCount++;
+          continue;
+        }
+        throw error;
+      }
+      
+      // Normalize each story's data structure
+      const normalizedStories = (data || []).map(storyData => normalizeStoryData(storyData));
+      
+      console.log('Query results:', {
+        count: normalizedStories.length,
+        first_item: normalizedStories.length > 0 ? { 
+          id: normalizedStories[0].id,
+          user_id: normalizedStories[0].user_id,
+          created_at: normalizedStories[0].created_at
+        } : null
+      });
+      
+      return normalizedStories;
+    } catch (error) {
+      lastError = error;
+      if (retryCount < maxRetries) {
+        console.error(`Retry ${retryCount + 1}/${maxRetries}: Error fetching stories for user ${userId}:`, error);
+        retryCount++;
+        continue;
+      }
+      console.error(`Final error fetching stories for user ${userId}:`, error);
+      throw new Error('Failed to load your stories. Please try again.');
     }
-    
-    // Normalize each story's data structure
-    const normalizedStories = (data || []).map(storyData => normalizeStoryData(storyData));
-    
-    console.log('Query results:', {
-      count: normalizedStories.length,
-      first_item: normalizedStories.length > 0 ? { 
-        id: normalizedStories[0].id,
-        user_id: normalizedStories[0].user_id,
-        created_at: normalizedStories[0].created_at
-      } : null
-    });
-    
-    return normalizedStories;
-  } catch (error) {
-    console.error(`Error fetching stories for user ${userId}:`, error);
-    throw new Error('Failed to load your stories. Please try again.');
   }
+  
+  // This should never be reached due to the return/throw in the loop
+  console.error('Unexpected exit from retry loop with error:', lastError);
+  return [];
 }
 
 /**
  * Get a specific user story by ID
  */
-export async function getUserStoryById(id: string): Promise<UserStory | null> {
-  try {
-    const supabase = getSupabase();
-    if (!supabase) {
-      return null; // Return null if client not initialized (e.g., during SSR)
-    }
-    
-    const { data, error } = await supabase
-      .from('user_stories')
-      .select('*')
-      .eq('id', id)
-      .single();
+export async function getUserStoryById(id: string, maxRetries = 3): Promise<UserStory | null> {
+  let retryCount = 0;
+  let lastError: any = null;
+  
+  while (retryCount <= maxRetries) {
+    try {
+      // Use a fresh client on retries
+      if (retryCount > 0) {
+        console.log(`Retry ${retryCount}/${maxRetries}: Refreshing Supabase client`);
+        refreshSupabaseClient();
+        await new Promise(resolve => setTimeout(resolve, 500 * retryCount)); // Increasing backoff
+      }
       
-    if (error) throw error;
-    
-    // Return null if no data
-    if (!data) return null;
-    
-    // Normalize the story's data structure
-    return normalizeStoryData(data);
-  } catch (error) {
-    console.error(`Error fetching user story with ID ${id}:`, error);
-    throw new Error('Failed to load story. Please try again.');
+      const supabase = getSupabase();
+      if (!supabase) {
+        if (retryCount < maxRetries) {
+          console.log(`Retry ${retryCount + 1}/${maxRetries}: Supabase client not initialized. Retrying...`);
+          retryCount++;
+          continue;
+        }
+        return null; // Return null after max retries
+      }
+      
+      // Check session validity
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.warn(`Attempt ${retryCount + 1}: Session error when fetching story ${id}`);
+        if (retryCount < maxRetries) {
+          retryCount++;
+          continue;
+        }
+      }
+      
+      const { data, error } = await supabase
+        .from('user_stories')
+        .select('*')
+        .eq('id', id)
+        .single();
+        
+      if (error) {
+        lastError = error;
+        if (retryCount < maxRetries) {
+          console.log(`Retry ${retryCount + 1}/${maxRetries}: Error fetching story. Retrying...`);
+          retryCount++;
+          continue;
+        }
+        throw error;
+      }
+      
+      // Return null if no data
+      if (!data) return null;
+      
+      // Normalize the story's data structure
+      return normalizeStoryData(data);
+    } catch (error) {
+      lastError = error;
+      if (retryCount < maxRetries) {
+        console.error(`Retry ${retryCount + 1}/${maxRetries}: Error fetching user story with ID ${id}:`, error);
+        retryCount++;
+        continue;
+      }
+      console.error(`Final error fetching user story with ID ${id}:`, error);
+      throw new Error('Failed to load story. Please try again.');
+    }
   }
+  
+  // This should never be reached due to the return/throw in the loop
+  console.error('Unexpected exit from retry loop with error:', lastError);
+  return null;
 }
 
 /**
@@ -344,60 +529,107 @@ export async function deleteUserStory(storyId: string): Promise<boolean> {
     console.log('==== STORY DELETION DEBUG ====');
     console.log('1. deleteUserStory called with story ID:', storyId);
     
-    // Step 1: Initialize Supabase
-    console.log('2. Getting Supabase client');
-    const supabase = getSupabase();
+    // Step 1: Get a fresh Supabase client
+    console.log('2. Getting a fresh Supabase client');
+    refreshSupabaseClient(); // Clear any stale clients
+    await new Promise(resolve => setTimeout(resolve, 100));
     
+    const supabase = getSupabase();
     if (!supabase) {
       console.error('3. ERROR: Supabase client not initialized');
       throw new Error('Supabase client not initialized');
     }
     console.log('3. Supabase client obtained successfully');
     
-    // Step 2: Verify authentication
+    // Step 2: Verify authentication with retries
     console.log('4. Checking authentication session');
-    const { data: session, error: sessionError } = await supabase.auth.getSession();
+    let sessionAttempts = 0;
+    const maxSessionAttempts = 3;
     
-    if (sessionError) {
-      console.error('5. ERROR: Failed to get session:', sessionError);
-      throw new Error(`Authentication session error: ${sessionError.message}`);
+    while (sessionAttempts < maxSessionAttempts) {
+      try {
+        const { data: session, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error(`5. Attempt ${sessionAttempts + 1}/${maxSessionAttempts}: Session error:`, sessionError);
+          sessionAttempts++;
+          
+          if (sessionAttempts < maxSessionAttempts) {
+            console.log('Refreshing client and retrying...');
+            refreshSupabaseClient();
+            await new Promise(resolve => setTimeout(resolve, 500 * sessionAttempts));
+            continue;
+          }
+          throw new Error(`Authentication error: ${sessionError.message}`);
+        }
+        
+        if (!session.session || !session.session.user) {
+          console.error(`5. Attempt ${sessionAttempts + 1}/${maxSessionAttempts}: No valid session found`);
+          sessionAttempts++;
+          
+          if (sessionAttempts < maxSessionAttempts) {
+            console.log('Refreshing client and retrying...');
+            refreshSupabaseClient();
+            await new Promise(resolve => setTimeout(resolve, 500 * sessionAttempts));
+            continue;
+          }
+          throw new Error('No active user session. Please sign in again.');
+        }
+        
+        // Success - we have a valid session
+        console.log(`5. Authentication successful on attempt ${sessionAttempts + 1}. User ID:`, session.session.user.id);
+        
+        // Step 3: Delete the story - let Supabase RLS handle permission checks
+        console.log('6. Attempting to delete story directly using RLS');
+        const { error: deleteError } = await supabase
+          .from('user_stories')
+          .delete()
+          .eq('id', storyId);
+          
+        if (deleteError) {
+          console.error('7. ERROR: Failed to delete story:', deleteError);
+          throw new Error(`Failed to delete story: ${deleteError.message}`);
+        }
+        
+        console.log('7. Story deleted successfully');
+        return true;
+        
+      } catch (error) {
+        if (sessionAttempts < maxSessionAttempts - 1) {
+          console.error(`Authentication error on attempt ${sessionAttempts + 1}:`, error);
+          sessionAttempts++;
+          await new Promise(resolve => setTimeout(resolve, 500 * sessionAttempts));
+          continue;
+        }
+        throw error;
+      }
     }
     
-    if (!session.session) {
-      console.error('5. ERROR: No active session found');
-      throw new Error('User not authenticated, please sign in again');
-    }
-    
-    console.log('5. User authenticated successfully, user ID:', session.session.user.id);
-    
-    // Step 3: Delete the story - let Supabase RLS handle permission checks
-    console.log('6. Attempting to delete story directly using RLS');
-    const { error: deleteError } = await supabase
-      .from('user_stories')
-      .delete()
-      .eq('id', storyId);
-      
-    if (deleteError) {
-      console.error('7. ERROR: Failed to delete story:', deleteError);
-      throw new Error(`Failed to delete story: ${deleteError.message}`);
-    }
-    
-    console.log('7. Story deleted successfully');
-    return true;
+    throw new Error('Failed to authenticate after multiple attempts');
     
   } catch (error) {
     console.error('==== STORY DELETION ERROR ====');
     console.error('Error deleting story from Supabase:', error);
-    throw new Error(error instanceof Error ? error.message : 'Failed to delete story. Please try again.');
+    
+    if (error instanceof Error) {
+      if (error.message.includes('session') || error.message.includes('auth') || 
+          error.message.includes('permission') || error.message.includes('sign in')) {
+        throw new Error('Authentication error. Please refresh the page and sign in again.');
+      }
+      throw new Error(error.message);
+    } else {
+      throw new Error('Failed to delete story. Please try again.');
+    }
   }
 }
 
 // Helper functions for Arabic translations
-function getDifficultyInArabic(difficulty: 'simple' | 'easy' | 'normal'): string {
+function getDifficultyInArabic(difficulty: 'simple' | 'easy' | 'normal' | 'advanced'): string {
   const translations = {
     simple: 'بسيط',
     easy: 'سهل',
-    normal: 'عادي'
+    normal: 'عادي',
+    advanced: 'متقدم'
   };
   return translations[difficulty];
 }
@@ -433,6 +665,7 @@ function normalizeStoryData(storyData: any): UserStory {
     created_at: storyData.created_at || new Date().toISOString(),
     user_id: storyData.user_id,
     word_mappings: {}
+    // longStory is not stored in the database so we don't need to normalize it
   };
 
   // Handle title object or string

@@ -2,9 +2,12 @@ import React from 'react';
 import Link from 'next/link';
 import { Layout } from '../components/Layout';
 import { StoryList } from '../components/StoryList';
+import { useAuth } from '../lib/auth';
 import styles from '../styles/Home.module.css';
 
 const Home = () => {
+  const { user } = useAuth();
+  
   return (
     <Layout>
       <section className={styles.hero}>
@@ -20,9 +23,15 @@ const Home = () => {
               <Link href="/stories" className={styles.primaryButton}>
                 Explore Stories
               </Link>
-              <Link href="/about" className={styles.secondaryButton}>
-                Learn More
-              </Link>
+              {user ? (
+                <Link href="/stories/create" className={styles.secondaryButton}>
+                  Create Story
+                </Link>
+              ) : (
+                <Link href="/login" className={styles.secondaryButton}>
+                  Sign In
+                </Link>
+              )}
             </div>
           </div>
           <div className={styles.heroImage}>
@@ -62,10 +71,36 @@ const Home = () => {
             </div>
             
             <div className={styles.featureCard}>
+              <div className={styles.featureIcon}>✍️</div>
+              <h3 className={styles.featureTitle}>Create custom stories</h3>
+              <p className={styles.featureDescription}>
+                Generate personalized stories with your chosen topic, dialect, and vocabulary
+              </p>
+            </div>
+          </div>
+          
+          <div className={styles.featureGrid}>
+            <div className={styles.featureCard}>
               <div className={styles.featureIcon}>🔄</div>
               <h3 className={styles.featureTitle}>Toggle translations</h3>
               <p className={styles.featureDescription}>
                 Show or hide English translations to test your understanding
+              </p>
+            </div>
+            
+            <div className={styles.featureCard}>
+              <div className={styles.featureIcon}>🌍</div>
+              <h3 className={styles.featureTitle}>Multiple dialects</h3>
+              <p className={styles.featureDescription}>
+                Practice with Hijazi, Saudi, Jordanian, or Egyptian dialects
+              </p>
+            </div>
+            
+            <div className={styles.featureCard}>
+              <div className={styles.featureIcon}>📈</div>
+              <h3 className={styles.featureTitle}>Track progress</h3>
+              <p className={styles.featureDescription}>
+                Save and access your created stories from your personal collection
               </p>
             </div>
           </div>

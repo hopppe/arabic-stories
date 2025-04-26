@@ -4,26 +4,39 @@
  */
 
 export const lostPhoneMappings: Record<string, string> = {
-  // Story-specific mappings
+  // First paragraph
   "سارة": "Sara",
   "كانت": "was",
   "تمشي": "walking",
+  "في": "in",
   "المول": "the mall",
-  "ولحظت": "when she noticed",
-  "إن": "that",
+  "عندما": "when",
+  "لاحظت": "she noticed",
+  "أن": "that",
   "جوالها": "her phone",
-  "مو": "not",
-  "معاها": "with her",
-  "دورت": "she looked",
-  "حواليها": "around",
+  "كان": "was",
+  "مفقود": "missing",
+  
+  // Second paragraph
+  "نظرت": "she looked",
+  "حولها": "around",
   "وسألت": "and asked",
-  "رجل": "a man",
-  "الأمن": "security guard",
-  "يساعدها": "to help her",
-  "رجال": "a man",
+  "حارس": "guard",
+  "الأمن": "security",
+  "للمساعدة": "for help",
+  
+  // Third paragraph
+  "رجل": "man",
   "طيب": "kind",
-  "لاقيه": "found it",
-  "وسلّمه": "and turned it in",
-  "ابتسمت": "smiled",
-  "وشكرته": "and thanked him"
+  "قد": "had",
+  "وجده": "found it",
+  "وسلمه": "and turned it in",
+  "إلى": "to",
+  "مكتب": "desk",
+  
+  // Fourth paragraph
+  "شكرت": "thanked",
+  "الرجل": "the man",
+  "وابتسمت": "and smiled",
+  "بارتياح": "with relief"
 }; 

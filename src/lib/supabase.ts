@@ -33,10 +33,33 @@ export const getSupabase = () => {
           persistSession: true,
           detectSessionInUrl: true,
           flowType: 'pkce',  // Use PKCE flow for better security
+          storageKey: 'arabic-stories-auth', // Unique storage key for this app
+          storage: {
+            getItem: (key) => {
+              if (typeof window === 'undefined') return null;
+              const value = localStorage.getItem(key);
+              return value;
+            },
+            setItem: (key, value) => {
+              if (typeof window === 'undefined') return;
+              localStorage.setItem(key, value);
+            },
+            removeItem: (key) => {
+              if (typeof window === 'undefined') return;
+              localStorage.removeItem(key);
+            },
+          },
         },
         global: {
-          fetch: fetch
-        }
+          fetch: (...args) => {
+            return fetch(...args);
+          },
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
+        },
       });
       
       // Test if the client is valid
@@ -53,6 +76,36 @@ export const getSupabase = () => {
   }
   
   return supabaseInstance;
+};
+
+// Force refresh the Supabase client
+export const refreshSupabaseClient = () => {
+  // Force clear all supabase local storage items first
+  if (typeof window !== 'undefined') {
+    try {
+      // Clear only supabase related storage items
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.includes('supabase') || key.includes('arabic-stories-auth'))) {
+          console.log('Removing localStorage key for refresh:', key);
+          localStorage.removeItem(key);
+        }
+      }
+    } catch (e) {
+      console.warn('Error clearing localStorage during refresh:', e);
+    }
+  }
+  
+  // Nullify the instance to force new creation
+  supabaseInstance = null;
+  
+  // Create a fresh instance
+  const newInstance = getSupabase();
+  
+  // Log the refresh operation
+  console.log('Supabase client refreshed:', !!newInstance);
+  
+  return newInstance;
 };
 
 /**
@@ -73,10 +126,14 @@ export const getServerSupabase = (req: NextApiRequest) => {
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: false,
+        autoRefreshToken: false,
       },
       global: {
         headers: {
           cookie: req.headers.cookie || '',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
         },
       },
     });
@@ -99,9 +156,10 @@ export interface UserStory {
     english: string[];
     arabic: string[];
   };
-  difficulty: 'simple' | 'easy' | 'normal';
+  difficulty: 'simple' | 'easy' | 'normal' | 'advanced';
   dialect: 'hijazi' | 'saudi' | 'jordanian' | 'egyptian';
   created_at: string;
   user_id?: string;
   word_mappings?: Record<string, string>;
+  // longStory is used only for story generation, not stored in the database
 } 

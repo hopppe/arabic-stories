@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import { getUserCreatedStories } from '../lib/storyService';
 import { UserStory } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
+import { ConnectionRecovery } from './ConnectionRecovery';
 import styles from './StoryList.module.css';
 
 interface UserStoryListProps {
@@ -20,6 +21,7 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
   const [userStories, setUserStories] = useState<UserStory[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [connectionError, setConnectionError] = useState(false);
   
   // Filtering and pagination states
   const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
@@ -28,27 +30,44 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
   const storiesPerPage = 9;
 
   // Fetch user created stories
+  const fetchUserCreatedStories = async () => {
+    if (!user?.id) return;
+    
+    setIsLoading(true);
+    setError(null);
+    setConnectionError(false);
+    
+    try {
+      // Log the user ID we're using to query
+      console.log('Fetching stories for user ID:', user.id);
+      
+      const fetchedStories = await getUserCreatedStories(user.id);
+      console.log('Fetched user created stories:', fetchedStories);
+      setUserStories(fetchedStories);
+    } catch (err: any) {
+      console.error('Error fetching user created stories:', err);
+      setError('Failed to load your created stories. Please try again.');
+      // Check if the error is likely a connection issue
+      setConnectionError(err.message?.includes('network') || 
+                         err.message?.includes('connection') || 
+                         err.message?.includes('fetch') ||
+                         err.message?.includes('timeout'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
   useEffect(() => {
     if (user?.id) {
-      const fetchUserCreatedStories = async () => {
-        setIsLoading(true);
-        try {
-          // Log the user ID we're using to query
-          console.log('Fetching stories for user ID:', user.id);
-          
-          const fetchedStories = await getUserCreatedStories(user.id);
-          console.log('Fetched user created stories:', fetchedStories);
-          setUserStories(fetchedStories);
-        } catch (err: any) {
-          console.error('Error fetching user created stories:', err);
-          setError('Failed to load your created stories. Please try again.');
-        } finally {
-          setIsLoading(false);
-        }
-      };
       fetchUserCreatedStories();
     }
   }, [user?.id]);
+
+  // Handle recovery success
+  const handleRecoverySuccess = () => {
+    // Retry fetching stories
+    fetchUserCreatedStories();
+  };
 
   // Apply filters and pagination
   const filteredStories = userStories.filter(story => {
@@ -73,12 +92,6 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
     setCurrentPage(page => Math.max(page - 1, 1));
   };
   
-  // Handle story click
-  const handleStoryClick = (storyId: string) => {
-    console.log('Navigating to story:', storyId);
-    router.push(`/stories/${storyId}`);
-  };
-
   if (isLoading) {
     return (
       <section className={styles.storyListSection}>
@@ -90,12 +103,28 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
     );
   }
 
+  if (connectionError) {
+    return (
+      <section className={styles.storyListSection}>
+        <div className={styles.storyListContainer}>
+          <h2 className={styles.sectionTitle}>{title}</h2>
+          <ConnectionRecovery onRecovered={handleRecoverySuccess} />
+        </div>
+      </section>
+    );
+  }
+
   if (error) {
     return (
       <section className={styles.storyListSection}>
         <div className={styles.storyListContainer}>
           <h2 className={styles.sectionTitle}>{title}</h2>
-          <div className={styles.errorMessage}>{error}</div>
+          <div className={styles.errorMessage}>
+            {error}
+            <button onClick={fetchUserCreatedStories} className={styles.retryButton}>
+              Try Again
+            </button>
+          </div>
         </div>
       </section>
     );
@@ -141,6 +170,7 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
               <option value="simple">Simple</option>
               <option value="easy">Easy</option>
               <option value="normal">Normal</option>
+              <option value="advanced">Advanced</option>
             </select>
           </div>
           
@@ -166,18 +196,10 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
         
         <div className={styles.storyGrid}>
           {currentStories.map((story) => (
-            <div 
+            <Link
+              href={`/stories/${story.id}`}
               key={story.id}
               className={styles.storyCard}
-              onClick={() => handleStoryClick(story.id)}
-              role="link"
-              tabIndex={0}
-              style={{ cursor: 'pointer' }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  handleStoryClick(story.id);
-                }
-              }}
             >
               <div className={styles.storyContent}>
                 <div className={styles.storyTitleWrapper}>
@@ -202,7 +224,7 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
                   <span className={styles.readMoreLink}>Read story</span>
                 </div>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
         
@@ -220,11 +242,11 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
               Page {currentPage} of {totalPages}
             </span>
             <button 
-              className={styles.paginationButton} 
+              className={`${styles.paginationButton} ${styles.seeMoreButton}`}
               onClick={goToNextPage}
               disabled={currentPage === totalPages}
             >
-              Next
+              {currentPage === 1 ? "See More Stories" : "Next"}
             </button>
           </div>
         )}

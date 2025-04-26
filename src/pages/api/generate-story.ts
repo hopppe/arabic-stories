@@ -8,9 +8,11 @@ const openai = new OpenAI({
 
 // Define parameter types for story generation
 type StoryParams = {
-  difficulty: 'simple' | 'easy' | 'normal';
+  difficulty: 'simple' | 'easy' | 'normal' | 'advanced';
   dialect: 'hijazi' | 'saudi' | 'jordanian' | 'egyptian';
   words: string[];
+  topic?: string;
+  longStory?: boolean;
 };
 
 // Define the structure of the API response
@@ -39,18 +41,21 @@ export default async function handler(
 
   try {
     // Parse the request body
-    const { difficulty, dialect, words } = req.body as StoryParams;
+    const { difficulty, dialect, words, topic, longStory } = req.body as StoryParams;
 
     // Validate required parameters
-    if (!difficulty || !dialect || !words || !Array.isArray(words) || words.length === 0) {
+    if (!difficulty || !dialect) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required parameters. Please provide difficulty, dialect, and words.',
+        error: 'Missing required parameters. Please provide difficulty and dialect.',
       });
     }
 
+    // Ensure words is an array even if not provided
+    const wordsToUse = Array.isArray(words) ? words : [];
+
     // Limit the number of words to prevent abuse
-    if (words.length > 20) {
+    if (wordsToUse.length > 20) {
       return res.status(400).json({
         success: false,
         error: 'Too many words. Please limit to 20 words or fewer.',
@@ -63,8 +68,10 @@ export default async function handler(
         role: "system",
         content: `
 You are an expert in Arabic dialects and second-language learning.
-Generate a short story in Arabic using the specified dialect and difficulty level. 
-The story must include the given words. 
+Generate a ${longStory ? 'long' : 'short'} story in Arabic using the specified dialect and difficulty level. 
+${wordsToUse.length > 0 ? 'The story must include the given words.' : 'Generate an interesting story with common vocabulary.'}
+${topic ? `The story should be about the following topic: "${topic}".` : ''}
+${longStory ? 'The story should be approximately one and a half times the length of a regular short story and should include more detail.' : ''}
 Create a meaningful title that reflects the content of the story (not just mentioning the dialect or difficulty).
 Provide a sentence-by-sentence English translation of the story.
 After that, provide a mapping (gloss) of Arabic words from the story to their English meanings.
@@ -77,6 +84,7 @@ For difficulty levels:
 - simple: Use very basic vocabulary and short, simple sentences
 - easy: Use common vocabulary and straightforward grammar
 - normal: Use moderate vocabulary and natural sentence structures
+- advanced: Use rich vocabulary, complex sentence structures, and nuanced expressions
 
 For dialects:
 - hijazi: Use Hijazi dialect from western Saudi Arabia
@@ -111,7 +119,9 @@ You MUST respond with valid JSON only, with no additional text or explanation in
 Generate a story using:
 - Difficulty: ${difficulty}
 - Dialect: ${dialect}
-- Required words: ${words.join('، ')}
+${wordsToUse.length > 0 ? `- Required words: ${wordsToUse.join('، ')}` : ''}
+${topic ? `- Topic: ${topic}` : ''}
+${longStory ? '- Long story: Yes' : ''}
 
 Return only valid JSON.
 `
@@ -123,7 +133,7 @@ Return only valid JSON.
       model: "gpt-4-turbo",
       messages: prompt as any,
       temperature: 0.7,
-      max_tokens: 3000,
+      max_tokens: longStory ? 4000 : 3000,
     });
 
     const responseText = completion.choices[0].message.content;

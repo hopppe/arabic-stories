@@ -8,9 +8,47 @@ import styles from '../../styles/CreateStory.module.css';
 import { getStripe, createCheckoutSession } from '../../lib/stripe';
 import { UserStory } from '../../lib/supabase';
 
+// Add this function before the main component
+function debugLocalStorage() {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key) keys.push(key);
+    }
+    
+    console.log('LocalStorage Debug - Keys:', keys);
+    
+    const pendingStory = localStorage.getItem('pendingStory');
+    if (pendingStory) {
+      try {
+        const parsed = JSON.parse(pendingStory);
+        console.log('LocalStorage Debug - Pending Story:', {
+          id: parsed.id,
+          title: parsed.title,
+          has_content: !!parsed.content,
+          user_id: parsed.user_id,
+          recovery_info: {
+            timestamp: parsed.recovery_timestamp,
+            reason: parsed.recovery_reason
+          }
+        });
+      } catch (e) {
+        console.error('LocalStorage Debug - Error parsing pendingStory:', e);
+      }
+    } else {
+      console.log('LocalStorage Debug - No pendingStory found');
+    }
+  } catch (e) {
+    console.error('LocalStorage Debug - Error accessing localStorage:', e);
+  }
+}
+
 const CreateStoryPage: React.FC = () => {
   const router = useRouter();
-  const { user, isPaid, isLoading: authLoading, refreshPaymentStatus } = useAuth();
+  const { user, isPaid, isLoading: authLoading, refreshPaymentStatus, recoverConnection } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [processingStep, setProcessingStep] = useState<string | null>(null);
   const [success, setSuccess] = useState('');
@@ -19,13 +57,19 @@ const CreateStoryPage: React.FC = () => {
     difficulty: 'normal',
     dialect: 'hijazi',
     words: '',
+    topic: '',
+    longStory: false,
   });
   const [error, setError] = useState('');
+  const [pendingStory, setPendingStory] = useState<UserStory | null>(null);
 
   // Only run browser-side code when the component mounts
   useEffect(() => {
     // Check if we're running in a browser
     if (typeof window === 'undefined') return;
+    
+    // Debug localStorage content
+    debugLocalStorage();
     
     console.log("CreateStoryPage: Initial render auth state:", { 
       user: !!user, 
@@ -71,13 +115,30 @@ const CreateStoryPage: React.FC = () => {
         console.error('Error parsing saved parameters:', e);
       }
     }
+
+    // Check for any pending story in localStorage
+    const savedStory = localStorage.getItem('pendingStory');
+    if (savedStory) {
+      try {
+        const storyData = JSON.parse(savedStory);
+        console.log('Found pending story in localStorage:', {
+          id: storyData.id,
+          recovery_timestamp: storyData.recovery_timestamp,
+          recovery_reason: storyData.recovery_reason
+        });
+        setPendingStory(storyData);
+      } catch (e) {
+        console.error('Error parsing saved story:', e);
+        localStorage.removeItem('pendingStory');
+      }
+    }
   }, [user, refreshPaymentStatus, isPaid, authLoading]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
+    const { name, value, type } = e.target as HTMLInputElement;
     setFormData({
       ...formData,
-      [name]: value,
+      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value,
     });
   };
 
@@ -116,13 +177,6 @@ const CreateStoryPage: React.FC = () => {
         .map(word => word.trim())
         .filter(word => word.length > 0);
 
-      if (wordsToInclude.length === 0) {
-        setError('Please include at least one word');
-        setIsSubmitting(false);
-        setProcessingStep(null);
-        return;
-      }
-
       if (wordsToInclude.length > 20) {
         setError('Please limit your list to 20 words or fewer for best results');
         setIsSubmitting(false);
@@ -131,7 +185,11 @@ const CreateStoryPage: React.FC = () => {
       }
 
       // Set up a timeout to prevent infinite hanging
-      const timeoutDuration = 60000; // 1 minute
+      const timeoutDuration = 120000; // 2 minutes for story generation
+
+      // Setup a shorter timeout for database operations
+      const dbTimeoutDuration = 15000; // 15 seconds for database operations
+
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => {
           reject(new Error('Operation timed out. Please try again.'));
@@ -146,10 +204,12 @@ const CreateStoryPage: React.FC = () => {
         // Race the story generation against the timeout
         const storyData = await Promise.race([
           generateStory({
-            difficulty: formData.difficulty as 'simple' | 'easy' | 'normal',
+            difficulty: formData.difficulty as 'simple' | 'easy' | 'normal' | 'advanced',
             dialect: formData.dialect as 'hijazi' | 'saudi' | 'jordanian' | 'egyptian',
             words: wordsToInclude,
+            topic: formData.topic.trim() || undefined,
             userId: user.id, // Add user ID to story data
+            longStory: formData.longStory,
           }),
           timeoutPromise
         ]) as UserStory;
@@ -162,13 +222,16 @@ const CreateStoryPage: React.FC = () => {
         try {
           console.log('Calling saveUserStory with user ID:', user.id);
           
-          // Race the save operation against a timeout
+          // Ensure the story has the current user's ID
+          storyData.user_id = user.id;
+          
+          // Race the save operation against a shorter timeout
           await Promise.race([
             saveUserStory(storyData),
             new Promise((_, reject) => {
               setTimeout(() => {
                 reject(new Error('Database save operation timed out. Your story was generated but could not be saved.'));
-              }, timeoutDuration);
+              }, dbTimeoutDuration); // Use shorter timeout for DB operations
             })
           ]);
           
@@ -176,6 +239,11 @@ const CreateStoryPage: React.FC = () => {
           // Show success message
           setProcessingStep(null);
           setSuccess('Story created successfully! Redirecting to stories page...');
+          
+          // Clean up any pending stories in localStorage
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('pendingStory');
+          }
           
           // Redirect to stories page after a short delay
           setTimeout(() => {
@@ -185,16 +253,29 @@ const CreateStoryPage: React.FC = () => {
           console.error('Error saving story to database:', saveError);
           setProcessingStep(null);
           
-          // Check for permission/auth errors specifically
-          if (saveError.message.includes('permission') || 
-              saveError.message.includes('auth') || 
-              saveError.message.includes('not authenticated')) {
-            setError('Permission denied. Please sign out and sign in again to fix this issue.');
-          } else if (saveError.message.includes('duplicate')) {
+          // Simplified error handling - no complex recovery attempts
+          if (saveError.message.includes('duplicate') || saveError.message.includes('already exists')) {
             setError('A story with this ID already exists. Please try again.');
           } else if (saveError.message.includes('timeout')) {
             setError('Database operation timed out. Your story was generated but couldn\'t be saved to your account.');
+            
+            // Store the generated story in localStorage as a backup with more details
+            if (typeof window !== 'undefined') {
+              try {
+                // Store the complete story with timestamp for easier recovery
+                const pendingStoryData = {
+                  ...storyData,
+                  recovery_timestamp: Date.now(),
+                  recovery_reason: 'timeout'
+                };
+                localStorage.setItem('pendingStory', JSON.stringify(pendingStoryData));
+                console.log('Story saved to localStorage as backup with timestamp');
+              } catch (e) {
+                console.error('Failed to save story to localStorage:', e);
+              }
+            }
           } else {
+            // For all other errors, show a generic message with the specific error
             setError(`Database error: ${saveError.message || 'Failed to save the story'}. Please try again.`);
           }
         }
@@ -354,7 +435,7 @@ const CreateStoryPage: React.FC = () => {
         )}
         
         <form onSubmit={handleSubmit} className={styles.storyForm}>
-          <div className={styles.formGroup}>
+          <div className={styles.formGroup} style={{ marginBottom: '15px' }}>
             <label htmlFor="difficulty" className={styles.label}>Story Difficulty</label>
             <select 
               id="difficulty" 
@@ -368,13 +449,14 @@ const CreateStoryPage: React.FC = () => {
               <option value="simple">Simple</option>
               <option value="easy">Easy</option>
               <option value="normal">Normal</option>
+              <option value="advanced">Advanced</option>
             </select>
             <p className={styles.fieldDescription}>
               Choose the difficulty level of your story.
             </p>
           </div>
           
-          <div className={styles.formGroup}>
+          <div className={styles.formGroup} style={{ marginBottom: '15px' }}>
             <label htmlFor="dialect" className={styles.label}>Arabic Dialect</label>
             <select 
               id="dialect" 
@@ -395,7 +477,33 @@ const CreateStoryPage: React.FC = () => {
             </p>
           </div>
           
-          <div className={styles.formGroup}>
+          <div className={styles.formGroup} style={{ marginBottom: '15px' }}>
+            <label htmlFor="topic" className={styles.label}>Story Topic</label>
+            <textarea 
+              id="topic" 
+              name="topic" 
+              value={formData.topic}
+              onChange={handleInputChange}
+              className={styles.textarea}
+              placeholder="Enter a topic for your story (optional)"
+              rows={1}
+              style={{ 
+                height: '44px', 
+                minHeight: '44px', 
+                overflowY: 'hidden', 
+                resize: 'none',
+                paddingTop: '12px',
+                paddingBottom: '12px',
+                lineHeight: '20px'
+              }}
+              disabled={isSubmitting}
+            ></textarea>
+            <p className={styles.fieldDescription}>
+              Enter a topic or theme for your story (optional). Can be a single word or a brief description.
+            </p>
+          </div>
+          
+          <div className={styles.formGroup} style={{ marginBottom: '15px' }}>
             <label htmlFor="words" className={styles.label}>Words to Include</label>
             <textarea 
               id="words" 
@@ -403,14 +511,30 @@ const CreateStoryPage: React.FC = () => {
               value={formData.words}
               onChange={handleInputChange}
               className={styles.textarea}
-              placeholder="Enter words separated by commas, tabs, or new lines"
+              placeholder="Enter words separated by commas, tabs, or new lines (optional)"
               rows={5}
               disabled={isSubmitting}
-              required
             ></textarea>
             <p className={styles.fieldDescription}>
-              Enter Arabic words you'd like to include in your story. Separate words with commas, tabs, or new lines.
+              Enter Arabic words you'd like to include in your story (optional). Separate words with commas, tabs, or new lines.
             </p>
+          </div>
+          
+          <div className={styles.formGroup} style={{ marginBottom: '20px' }}>
+            <div className={styles.checkboxContainer}>
+              <input
+                type="checkbox"
+                id="longStory"
+                name="longStory"
+                checked={formData.longStory}
+                onChange={handleInputChange}
+                className={styles.checkbox}
+                disabled={isSubmitting}
+              />
+              <label htmlFor="longStory" className={styles.checkboxLabel}>
+                Generate a longer story (approximately twice the regular length)
+              </label>
+            </div>
           </div>
           
           <div className={styles.formActions}>
@@ -423,6 +547,68 @@ const CreateStoryPage: React.FC = () => {
             </button>
           </div>
         </form>
+
+        {pendingStory && (
+          <div className={styles.pendingStoryAlert}>
+            <p>We found a story that was created but not saved to your account. Would you like to recover it?</p>
+            <div className={styles.buttonGroup}>
+              <button 
+                onClick={async () => {
+                  setIsSubmitting(true);
+                  setError('');
+                  setSuccess('');
+                  setProcessingStep('Saving recovered story...');
+                  
+                  try {
+                    console.log('Attempting to recover story:', pendingStory.id);
+                    
+                    // Ensure the story has the current user's ID and create a new ID
+                    const recoveredStory = {
+                      ...pendingStory,
+                      user_id: user.id,
+                      id: `story-${Date.now()}` // Generate a new unique ID to avoid conflicts
+                    };
+                    
+                    console.log('Recovery: Saving story with new ID:', recoveredStory.id);
+                    await saveUserStory(recoveredStory);
+                    
+                    // Success
+                    console.log('Story recovered successfully');
+                    setProcessingStep(null);
+                    setSuccess(`Story "${recoveredStory.title.english}" recovered successfully! Redirecting to your stories page...`);
+                    localStorage.removeItem('pendingStory');
+                    setPendingStory(null);
+                    
+                    // Redirect
+                    setTimeout(() => {
+                      router.push('/stories');
+                    }, 2000);
+                  } catch (error: any) {
+                    console.error('Error saving recovered story:', error);
+                    setProcessingStep(null);
+                    setError(`Failed to save recovered story: ${error.message}. Please try again.`);
+                  } finally {
+                    setIsSubmitting(false);
+                  }
+                }}
+                className={styles.primaryButton}
+                disabled={isSubmitting}
+              >
+                Recover Story
+              </button>
+              <button
+                onClick={() => {
+                  localStorage.removeItem('pendingStory');
+                  setPendingStory(null);
+                }}
+                className={styles.secondaryButton}
+                disabled={isSubmitting}
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );

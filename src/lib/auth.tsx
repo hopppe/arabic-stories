@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { getSupabase } from './supabase';
+import { getSupabase, refreshSupabaseClient } from './supabase';
 
 // Define auth context type
 type AuthContextType = {
@@ -14,6 +14,7 @@ type AuthContextType = {
   resetPassword: (email: string) => Promise<{ error: any }>;
   isPaid: boolean;
   refreshPaymentStatus: () => Promise<boolean>;
+  recoverConnection: () => Promise<boolean>;
 };
 
 // Create auth context with default values
@@ -28,6 +29,7 @@ const AuthContext = createContext<AuthContextType>({
   resetPassword: () => Promise.resolve({ error: null }),
   isPaid: false,
   refreshPaymentStatus: () => Promise.resolve(false),
+  recoverConnection: () => Promise.resolve(false),
 });
 
 // Auth provider component
@@ -36,91 +38,157 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPaid, setIsPaid] = useState(false);
+  const [connectionError, setConnectionError] = useState<boolean>(false);
 
-  useEffect(() => {
-    // Initialize auth state
-    const initializeAuth = async () => {
-      try {
-        const supabase = getSupabase();
-        if (!supabase) return;
+  // Function to initialize Supabase auth
+  const initializeAuth = async () => {
+    try {
+      const supabase = getSupabase();
+      if (!supabase) {
+        setConnectionError(true);
+        return;
+      }
 
-        // Check for current session
-        const { data: { session } } = await supabase.auth.getSession();
-        setSession(session);
-        setUser(session?.user || null);
+      // Check for current session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error("Error getting session:", sessionError);
+        setConnectionError(true);
+        return;
+      }
+      
+      setSession(session);
+      setUser(session?.user || null);
+      setConnectionError(false);
 
-        // If user exists, check if they've paid
-        if (session?.user) {
-          console.log("Auth: checking payment status for user", session.user.id);
-          const { data, error } = await supabase
-            .from('profiles')
-            .select('has_paid')
-            .eq('id', session.user.id)
-            .single();
+      // If user exists, check if they've paid
+      if (session?.user) {
+        console.log("Auth: checking payment status for user", session.user.id);
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('has_paid')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (error) {
+          console.error("Error fetching payment status:", error);
+        } else {
+          console.log("Auth: payment status data:", data);
+          setIsPaid(data?.has_paid === true);
+        }
+      }
+
+      // Set up auth state listener
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          console.log("Auth state change event:", event);
+          setSession(session);
+          setUser(session?.user || null);
           
-          if (error) {
-            console.error("Error fetching payment status:", error);
+          // When user signs in, check paid status
+          if (session?.user) {
+            console.log("Auth state change: checking payment status");
+            const { data, error } = await supabase
+              .from('profiles')
+              .select('has_paid')
+              .eq('id', session.user.id)
+              .single();
+            
+            if (error) {
+              console.error("Error fetching payment status on auth change:", error);
+            } else {
+              console.log("Auth state change: payment status:", data);
+              setIsPaid(data?.has_paid === true);
+            }
           } else {
-            console.log("Auth: payment status data:", data);
-            setIsPaid(data?.has_paid === true);
+            // Reset paid status if logged out
+            setIsPaid(false);
           }
         }
+      );
 
-        // Set up auth state listener
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-          async (event, session) => {
-            console.log("Auth state change event:", event);
-            setSession(session);
-            setUser(session?.user || null);
-            
-            // When user signs in, check paid status
-            if (session?.user) {
-              console.log("Auth state change: checking payment status");
-              const { data, error } = await supabase
-                .from('profiles')
-                .select('has_paid')
-                .eq('id', session.user.id)
-                .single();
-              
-              if (error) {
-                console.error("Error fetching payment status on auth change:", error);
-              } else {
-                console.log("Auth state change: payment status:", data);
-                setIsPaid(data?.has_paid === true);
-              }
-            } else {
-              // Reset paid status if logged out
-              setIsPaid(false);
-            }
-          }
-        );
+      setIsLoading(false);
+      
+      // Cleanup subscription on unmount
+      return () => {
+        subscription.unsubscribe();
+      };
+    } catch (error) {
+      console.error('Error initializing auth:', error);
+      setConnectionError(true);
+      setIsLoading(false);
+    }
+  };
 
-        setIsLoading(false);
-        
-        // Cleanup subscription on unmount
-        return () => {
-          subscription.unsubscribe();
-        };
-      } catch (error) {
-        console.error('Error initializing auth:', error);
-        setIsLoading(false);
-      }
-    };
-
+  useEffect(() => {
     initializeAuth();
-  }, []);
+    
+    // Setup a recovery interval to check connection status
+    const recoveryInterval = setInterval(() => {
+      if (connectionError) {
+        console.log("Attempting to recover Supabase connection...");
+        recoverConnection();
+      }
+    }, 30000); // Check every 30 seconds
+    
+    return () => {
+      clearInterval(recoveryInterval);
+    };
+  }, [connectionError]);
+
+  // Recover connection function
+  const recoverConnection = async (): Promise<boolean> => {
+    console.log("Executing connection recovery...");
+    try {
+      // Refresh the Supabase client first
+      const supabase = refreshSupabaseClient();
+      if (!supabase) {
+        console.error("Failed to refresh Supabase client");
+        return false;
+      }
+      
+      // Verify connection by getting session
+      const { data, error } = await supabase.auth.getSession();
+      
+      if (error) {
+        console.error("Connection recovery failed:", error);
+        return false;
+      }
+      
+      console.log("Connection recovery succeeded");
+      setConnectionError(false);
+      
+      // Re-initialize auth
+      await initializeAuth();
+      return true;
+    } catch (error) {
+      console.error("Error during connection recovery:", error);
+      return false;
+    }
+  };
 
   // Sign in with email
   const signIn = async (email: string, password: string) => {
     const supabase = getSupabase();
     if (!supabase) return { error: new Error('Supabase client not initialized') };
     
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    
-    return { error };
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (!error) {
+        setConnectionError(false);
+      }
+      
+      return { error };
+    } catch (error) {
+      console.error("Sign in error:", error);
+      setConnectionError(true);
+      return { error };
+    }
   };
 
   // Sign in with Google
@@ -128,17 +196,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const supabase = getSupabase();
     if (!supabase) return { error: new Error('Supabase client not initialized') };
     
-    // Get current origin to handle both production and development environments
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${origin}/auth/callback`,
+    try {
+      // Get current origin to handle both production and development environments
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${origin}/auth/callback`,
+        }
+      });
+      
+      if (!error) {
+        setConnectionError(false);
       }
-    });
-    
-    return { error };
+      
+      return { error };
+    } catch (error) {
+      console.error("Google sign in error:", error);
+      setConnectionError(true);
+      return { error };
+    }
   };
 
   // Sign up with email
@@ -146,30 +224,80 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const supabase = getSupabase();
     if (!supabase) return { error: new Error('Supabase client not initialized'), user: null };
     
-    // Get current origin if we need to set a redirect URL in the future
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: undefined,  // Don't redirect to any URL
-        data: {
-          confirmed_at: new Date().toISOString(),  // Pre-confirm the email
+    try {
+      // Get current origin if we need to set a redirect URL in the future
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: undefined,  // Don't redirect to any URL
+          data: {
+            confirmed_at: new Date().toISOString(),  // Pre-confirm the email
+          }
         }
+      });
+      
+      if (!error) {
+        setConnectionError(false);
       }
-    });
-    
-    return { error, user: data.user };
+      
+      return { error, user: data.user };
+    } catch (error) {
+      console.error("Sign up error:", error);
+      setConnectionError(true);
+      return { error: error instanceof Error ? error : new Error('Unknown error during signup'), user: null };
+    }
   };
 
   // Sign out
   const signOut = async () => {
-    const supabase = getSupabase();
-    if (!supabase) return { error: new Error('Supabase client not initialized') };
-    
-    const { error } = await supabase.auth.signOut();
-    return { error };
+    try {
+      // First try with a refreshed client
+      const supabase = refreshSupabaseClient();
+      if (!supabase) {
+        console.error('Could not initialize Supabase client for signout');
+        return { error: new Error('Supabase client not initialized') };
+      }
+      
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+      
+      // Clear stored session data aggressively
+      if (typeof window !== 'undefined') {
+        try {
+          // Clear all potential auth storage keys
+          localStorage.removeItem('arabic-stories-auth');
+          localStorage.removeItem('supabase.auth.token');
+          
+          // Clear any cookies by setting expired date
+          document.cookie.split(";").forEach(function(c) {
+            document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+          });
+          
+          // Wait a bit for cookies to clear
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Reset auth state
+          setUser(null);
+          setSession(null);
+          setIsPaid(false);
+        } catch (e) {
+          console.warn("Error clearing local storage:", e);
+        }
+      }
+      
+      console.log("Sign out completed, error:", error);
+      
+      // Force refresh of client on next use
+      refreshSupabaseClient();
+      
+      return { error };
+    } catch (error) {
+      console.error("Sign out error:", error);
+      return { error };
+    }
   };
 
   // Reset password
@@ -177,14 +305,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const supabase = getSupabase();
     if (!supabase) return { error: new Error('Supabase client not initialized') };
     
-    // Get current origin to handle both production and development environments
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${origin}/auth/reset-password`,
-    });
-    
-    return { error };
+    try {
+      // Get current origin to handle both production and development environments
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${origin}/auth/reset-password`,
+      });
+      
+      return { error };
+    } catch (error) {
+      console.error("Reset password error:", error);
+      return { error };
+    }
   };
 
   // Update profile with payment status
@@ -194,15 +327,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const supabase = getSupabase();
     if (!supabase) return { error: new Error('Supabase client not initialized') };
     
-    const { error } = await supabase
-      .from('profiles')
-      .upsert({ id: user.id, has_paid: hasPaid });
-    
-    if (!error) {
-      setIsPaid(hasPaid);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({ id: user.id, has_paid: hasPaid });
+      
+      if (!error) {
+        setIsPaid(hasPaid);
+      }
+      
+      return { error };
+    } catch (error) {
+      console.error("Update payment status error:", error);
+      return { error };
     }
-    
-    return { error };
   };
 
   // Check and update payment status from database
@@ -247,6 +385,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resetPassword,
         isPaid,
         refreshPaymentStatus,
+        recoverConnection,
       }}
     >
       {children}
