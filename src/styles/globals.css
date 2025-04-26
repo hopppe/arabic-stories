@@ -25,6 +25,7 @@
   --border-radius-small: 8px;
   --border-radius-medium: 12px;
   --border-radius-large: 16px;
+  --border-radius-full: 9999px;
 
   --font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --font-size-small: 13px;
@@ -56,6 +57,36 @@ body {
   background-color: var(--background);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+/* Add viewport meta tag to ensure proper mobile rendering */
+head::after {
+  content: '';
+  display: none;
+}
+
+@media only screen and (max-width: 768px) {
+  :root {
+    touch-action: manipulation; /* Prevents delay on touch devices */
+  }
+  
+  /* Increase touch targets on mobile */
+  a, button, .button, [role="button"] {
+    min-height: var(--touch-target);
+    min-width: var(--touch-target);
+  }
+  
+  /* Adjust font sizes for mobile */
+  .text-small {
+    font-size: 14px; /* Ensure readable font size on mobile */
+  }
+  
+  /* Remove hover effects on touch devices */
+  a:hover, button:hover, .button:hover {
+    transition: none;
+  }
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -149,6 +180,17 @@ button:active, .button:active {
   
   h2 {
     font-size: var(--font-size-large);
+  }
+  
+  /* Improve button touch areas on mobile */
+  button, .button {
+    padding: var(--spacing-sm) var(--spacing-lg);
+    min-height: 44px; /* Apple's minimum touch target size */
+  }
+  
+  /* Adjust container padding for mobile */
+  .container {
+    padding: 0 var(--spacing-sm);
   }
 }
 

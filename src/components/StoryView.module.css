@@ -146,6 +146,19 @@
   text-align: left;
 }
 
+/* Left-aligned tooltip for words near the right edge */
+.leftAligned {
+  left: 0;
+  transform: translateX(0);
+}
+
+/* Right-aligned tooltip for words near the left edge */
+.rightAligned {
+  left: auto;
+  right: 0;
+  transform: translateX(0);
+}
+
 .wordTooltip:after {
   content: '';
   position: absolute;
@@ -157,6 +170,15 @@
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
   border-bottom: 5px solid #2c2c2e;
+}
+
+/* Adjust arrow positions for aligned tooltips */
+.leftAligned:after {
+  left: 15%;
+}
+
+.rightAligned:after {
+  left: 85%;
 }
 
 .englishParagraph {
@@ -279,15 +301,37 @@
     max-width: 250px;
     font-size: 12px;
     bottom: -40px;
+    padding: 6px 10px;
+  }
+  
+  /* For very small screens, make tooltip wider */
+  @media (max-width: 375px) {
+    .wordTooltip {
+      max-width: 200px;
+    }
   }
   
   .translationBar {
     padding: var(--spacing-sm) var(--spacing-md);
+    /* Add bottom padding for iOS devices with home indicator */
+    padding-bottom: max(var(--spacing-sm), env(safe-area-inset-bottom, var(--spacing-sm)));
+  }
+  
+  .translationBarContent {
+    flex-wrap: wrap;
   }
   
   .translationArabicWord,
   .translationEnglishWord {
     font-size: var(--font-size-base);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  /* Add bottom padding to main content to prevent overlap with translation bar */
+  .storyContainer {
+    padding-bottom: 80px;
   }
 }
 
@@ -324,4 +368,9 @@
   border: 1px solid #f56565;
   border-radius: 4px;
   color: #c53030;
+}
+
+.storyContainer {
+  width: 100%;
+  position: relative;
 } 

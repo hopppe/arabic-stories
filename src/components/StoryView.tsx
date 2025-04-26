@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Story } from '../types/Story';
 import { getWordMappingsForStory } from '../data/mappings';
 import { splitArabicText } from '../data/stories';
@@ -33,6 +33,32 @@ export const StoryView: React.FC<StoryViewProps> = ({ story }) => {
   
   // Check if the story is a user-created story
   const isUserStory = 'user_id' in story;
+  
+  // Add a ref for tooltip positioning
+  const tooltipRef = useRef<HTMLSpanElement | null>(null);
+  const wordRef = useRef<HTMLSpanElement | null>(null);
+
+  // Function to calculate tooltip position
+  const calculateTooltipPosition = useCallback((wordElement: HTMLElement | null) => {
+    if (!wordElement) return null;
+    
+    const rect = wordElement.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    
+    // Default position (center below)
+    let position = { horizontal: 'center', vertical: 'bottom' };
+    
+    // Check if tooltip would go off screen to the left
+    if (rect.left < 150) {
+      position.horizontal = 'left';
+    } 
+    // Check if tooltip would go off screen to the right
+    else if (rect.right > viewportWidth - 150) {
+      position.horizontal = 'right';
+    }
+    
+    return position;
+  }, []);
   
   useEffect(() => {
     // Check if story is a UserStory with word_mappings
@@ -337,14 +363,30 @@ export const StoryView: React.FC<StoryViewProps> = ({ story }) => {
                   return (
                     <span
                       key={token.index}
+                      ref={hoveredToken === token ? wordRef : null}
                       className={`${styles.arabicWord} ${hasTranslation ? styles.translatable : ''} ${isClicked ? styles.clicked : ''}`}
-                      onMouseEnter={() => handleTokenHover(token)}
+                      onMouseEnter={(e) => {
+                        handleTokenHover(token);
+                        // Store the element reference for position calculation
+                        wordRef.current = e.currentTarget;
+                      }}
                       onMouseLeave={handleTokenLeave}
                       onClick={() => handleTokenClick(token)}
                     >
                       {token.text}{' '}
                       {tooltipContent && hoveredToken === token && (
-                        <span className={styles.wordTooltip}>{tooltipContent}</span>
+                        <span 
+                          ref={tooltipRef}
+                          className={`${styles.wordTooltip} ${
+                            wordRef.current && calculateTooltipPosition(wordRef.current)?.horizontal === 'left' 
+                              ? styles.leftAligned 
+                              : wordRef.current && calculateTooltipPosition(wordRef.current)?.horizontal === 'right'
+                                ? styles.rightAligned
+                                : ''
+                          }`}
+                        >
+                          {tooltipContent}
+                        </span>
                       )}
                     </span>
                   );
