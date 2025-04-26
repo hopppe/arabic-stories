@@ -1,23 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { stories } from '../data/stories';
-import { getUserStories } from '../lib/storyService';
+import { getUserCreatedStories } from '../lib/storyService';
 import { UserStory } from '../lib/supabase';
+import { useAuth } from '../lib/auth';
 import styles from './StoryList.module.css';
 
-interface StoryListProps {
-  showUserStories?: boolean;
+interface UserStoryListProps {
   title?: string;
   subtitle?: string;
 }
 
-export const StoryList: React.FC<StoryListProps> = ({ 
-  showUserStories = false,
-  title = "Explore Stories",
-  subtitle = "Learn Arabic through engaging stories with word-by-word translations"
+export const UserStoryList: React.FC<UserStoryListProps> = ({ 
+  title = "Your Created Stories",
+  subtitle = "Stories you've created with your chosen vocabulary words"
 }) => {
   const router = useRouter();
+  const { user } = useAuth();
   const [userStories, setUserStories] = useState<UserStory[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,36 +27,35 @@ export const StoryList: React.FC<StoryListProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const storiesPerPage = 9;
 
-  // Fetch user stories if required
+  // Fetch user created stories
   useEffect(() => {
-    if (showUserStories) {
-      const fetchUserStories = async () => {
+    if (user?.id) {
+      const fetchUserCreatedStories = async () => {
         setIsLoading(true);
         try {
-          const fetchedStories = await getUserStories();
-          console.log('Fetched user stories:', fetchedStories);
+          // Log the user ID we're using to query
+          console.log('Fetching stories for user ID:', user.id);
+          
+          const fetchedStories = await getUserCreatedStories(user.id);
+          console.log('Fetched user created stories:', fetchedStories);
           setUserStories(fetchedStories);
         } catch (err: any) {
-          console.error('Error fetching user stories:', err);
-          setError('Failed to load your stories. Please try again.');
+          console.error('Error fetching user created stories:', err);
+          setError('Failed to load your created stories. Please try again.');
         } finally {
           setIsLoading(false);
         }
       };
-      fetchUserStories();
+      fetchUserCreatedStories();
     }
-  }, [showUserStories]);
+  }, [user?.id]);
 
   // Apply filters and pagination
-  const filteredStories = (showUserStories ? userStories : stories).filter(story => {
-    if (showUserStories) {
-      const userStory = story as UserStory;
-      return (
-        (difficultyFilter === 'all' || userStory.difficulty === difficultyFilter) &&
-        (dialectFilter === 'all' || userStory.dialect === dialectFilter)
-      );
-    }
-    return true; // No filtering for built-in stories
+  const filteredStories = userStories.filter(story => {
+    return (
+      (difficultyFilter === 'all' || story.difficulty === difficultyFilter) &&
+      (dialectFilter === 'all' || story.dialect === dialectFilter)
+    );
   });
 
   // Get current stories for pagination
@@ -86,7 +84,7 @@ export const StoryList: React.FC<StoryListProps> = ({
       <section className={styles.storyListSection}>
         <div className={styles.storyListContainer}>
           <h2 className={styles.sectionTitle}>{title}</h2>
-          <div className={styles.loadingIndicator}>Loading stories...</div>
+          <div className={styles.loadingIndicator}>Loading your stories...</div>
         </div>
       </section>
     );
@@ -103,8 +101,8 @@ export const StoryList: React.FC<StoryListProps> = ({
     );
   }
 
-  // If showing user stories but none exist
-  if (showUserStories && userStories.length === 0) {
+  // If no user stories exist
+  if (userStories.length === 0) {
     return (
       <section className={styles.storyListSection}>
         <div className={styles.storyListContainer}>
@@ -126,47 +124,45 @@ export const StoryList: React.FC<StoryListProps> = ({
         <h2 className={styles.sectionTitle}>{title}</h2>
         <p className={styles.sectionSubtitle}>{subtitle}</p>
         
-        {/* Filters - only show for user stories */}
-        {showUserStories && (
-          <div className={styles.filtersContainer}>
-            <div className={styles.filterGroup}>
-              <label htmlFor="difficulty" className={styles.filterLabel}>Difficulty:</label>
-              <select 
-                id="difficulty" 
-                className={styles.filterSelect}
-                value={difficultyFilter}
-                onChange={(e) => {
-                  setDifficultyFilter(e.target.value);
-                  setCurrentPage(1); // Reset to first page when filter changes
-                }}
-              >
-                <option value="all">All Difficulties</option>
-                <option value="simple">Simple</option>
-                <option value="easy">Easy</option>
-                <option value="normal">Normal</option>
-              </select>
-            </div>
-            
-            <div className={styles.filterGroup}>
-              <label htmlFor="dialect" className={styles.filterLabel}>Dialect:</label>
-              <select 
-                id="dialect" 
-                className={styles.filterSelect}
-                value={dialectFilter}
-                onChange={(e) => {
-                  setDialectFilter(e.target.value);
-                  setCurrentPage(1); // Reset to first page when filter changes
-                }}
-              >
-                <option value="all">All Dialects</option>
-                <option value="hijazi">Hijazi</option>
-                <option value="saudi">Saudi</option>
-                <option value="jordanian">Jordanian</option>
-                <option value="egyptian">Egyptian</option>
-              </select>
-            </div>
+        {/* Filters */}
+        <div className={styles.filtersContainer}>
+          <div className={styles.filterGroup}>
+            <label htmlFor="difficulty" className={styles.filterLabel}>Difficulty:</label>
+            <select 
+              id="difficulty" 
+              className={styles.filterSelect}
+              value={difficultyFilter}
+              onChange={(e) => {
+                setDifficultyFilter(e.target.value);
+                setCurrentPage(1); // Reset to first page when filter changes
+              }}
+            >
+              <option value="all">All Difficulties</option>
+              <option value="simple">Simple</option>
+              <option value="easy">Easy</option>
+              <option value="normal">Normal</option>
+            </select>
           </div>
-        )}
+          
+          <div className={styles.filterGroup}>
+            <label htmlFor="dialect" className={styles.filterLabel}>Dialect:</label>
+            <select 
+              id="dialect" 
+              className={styles.filterSelect}
+              value={dialectFilter}
+              onChange={(e) => {
+                setDialectFilter(e.target.value);
+                setCurrentPage(1); // Reset to first page when filter changes
+              }}
+            >
+              <option value="all">All Dialects</option>
+              <option value="hijazi">Hijazi</option>
+              <option value="saudi">Saudi</option>
+              <option value="jordanian">Jordanian</option>
+              <option value="egyptian">Egyptian</option>
+            </select>
+          </div>
+        </div>
         
         <div className={styles.storyGrid}>
           {currentStories.map((story) => (
@@ -185,26 +181,23 @@ export const StoryList: React.FC<StoryListProps> = ({
             >
               <div className={styles.storyContent}>
                 <div className={styles.storyTitleWrapper}>
-                  <h3 className={styles.storyTitle}>{story.title.english}</h3>
-                  <h4 className={styles.storyArabicTitle}>{story.title.arabic}</h4>
+                  <h3 className={styles.storyTitle}>{story.title?.english || 'Untitled'}</h3>
+                  <h4 className={styles.storyArabicTitle}>{story.title?.arabic || ''}</h4>
                 </div>
                 <p className={styles.storyPreview}>
-                  {story.content.english[0].substring(0, 120)}
-                  {story.content.english[0].length > 120 ? '...' : ''}
+                  {story.content?.english && story.content.english[0] 
+                    ? story.content.english[0].substring(0, 120) + (story.content.english[0].length > 120 ? '...' : '')
+                    : 'No preview available'}
                 </p>
                 <div className={styles.storyMeta}>
-                  {showUserStories && (
-                    <>
-                      <span className={styles.storyDifficulty}>
-                        {(story as UserStory).difficulty || 'normal'}
-                      </span>
-                      <span className={styles.storyDialect}>
-                        {(story as UserStory).dialect || 'standard'}
-                      </span>
-                    </>
-                  )}
+                  <span className={styles.storyDifficulty}>
+                    {story.difficulty || 'normal'}
+                  </span>
+                  <span className={styles.storyDialect}>
+                    {story.dialect || 'standard'}
+                  </span>
                   <span className={styles.paragraphCount}>
-                    {story.content.english.length} paragraphs
+                    {story.content?.english?.length || 0} paragraphs
                   </span>
                   <span className={styles.readMoreLink}>Read story</span>
                 </div>

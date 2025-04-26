@@ -4,6 +4,8 @@ import { getWordMappingsForStory } from '../data/mappings';
 import { splitArabicText } from '../data/stories';
 import { LearnedWordsList, LearnedWord } from './LearnedWordsList';
 import { UserStory } from '../lib/supabase';
+import { useRouter } from 'next/router';
+import { getSupabase } from '../lib/supabase';
 import styles from './StoryView.module.css';
 
 interface StoryViewProps {
@@ -20,11 +22,17 @@ interface Token {
 }
 
 export const StoryView: React.FC<StoryViewProps> = ({ story }) => {
+  const router = useRouter();
   const [mappings, setMappings] = useState<Record<string, string>>({});
   const [hoveredToken, setHoveredToken] = useState<Token | null>(null);
   const [showTranslations, setShowTranslations] = useState(true);
   const [learnedWords, setLearnedWords] = useState<LearnedWord[]>([]);
   const [clickedPhrases, setClickedPhrases] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  
+  // Check if the story is a user-created story
+  const isUserStory = 'user_id' in story;
   
   useEffect(() => {
     // Check if story is a UserStory with word_mappings
@@ -227,6 +235,61 @@ export const StoryView: React.FC<StoryViewProps> = ({ story }) => {
     return token.translation;
   };
   
+  // Function to handle story deletion
+  const handleDeleteStory = async () => {
+    if (!isUserStory) return;
+    
+    // Confirm deletion
+    if (!window.confirm('Are you sure you want to delete this story? This action cannot be undone.')) {
+      return;
+    }
+    
+    setIsDeleting(true);
+    setDeleteError(null);
+    
+    try {
+      // Get Supabase client directly in the component
+      const supabase = getSupabase();
+      
+      if (!supabase) {
+        throw new Error('Could not initialize database connection');
+      }
+      
+      // Check authentication
+      const { data: session } = await supabase.auth.getSession();
+      
+      if (!session.session) {
+        throw new Error('User not authenticated, please sign in again');
+      }
+      
+      console.log('Deleting story with ID:', story.id);
+      
+      // Delete directly from the client
+      const { error: deleteError } = await supabase
+        .from('user_stories')
+        .delete()
+        .eq('id', story.id);
+        
+      if (deleteError) {
+        console.error('Error deleting story:', deleteError);
+        throw new Error(deleteError.message || 'Failed to delete story');
+      }
+      
+      console.log('Story deleted successfully, redirecting to my stories page');
+      
+      // Success - navigate immediately to my-stories page to prevent trying to load deleted story
+      router.push('/stories/my-stories').then(() => {
+        // Show a success message after redirect
+        alert('Story deleted successfully');
+      });
+    } catch (error) {
+      console.error('Error deleting story:', error);
+      setDeleteError(error instanceof Error ? error.message : 'An error occurred while deleting the story');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+  
   return (
     <div className={styles.storyViewContainer}>
       <div className={styles.storyHeader}>
@@ -234,14 +297,32 @@ export const StoryView: React.FC<StoryViewProps> = ({ story }) => {
           <h1 className={styles.storyTitle}>{story.title.english}</h1>
           <h2 className={styles.storyArabicTitle}>{story.title.arabic}</h2>
         </div>
-        <button 
-          className={styles.translationToggle} 
-          onClick={toggleTranslations}
-          aria-pressed={showTranslations}
-        >
-          {showTranslations ? 'Hide' : 'Show'} Translations
-        </button>
+        <div className={styles.storyActions}>
+          {isUserStory && (
+            <button 
+              className={styles.deleteStoryButton}
+              onClick={handleDeleteStory}
+              disabled={isDeleting}
+              aria-label="Delete story"
+            >
+              {isDeleting ? 'Deleting...' : 'Delete Story'}
+            </button>
+          )}
+          <button 
+            className={styles.translationToggle} 
+            onClick={toggleTranslations}
+            aria-pressed={showTranslations}
+          >
+            {showTranslations ? 'Hide' : 'Show'} Translations
+          </button>
+        </div>
       </div>
+      
+      {deleteError && (
+        <div className={styles.errorMessage}>
+          {deleteError}
+        </div>
+      )}
       
       <div className={styles.storyLayout}>
         <div className={styles.storyContent}>

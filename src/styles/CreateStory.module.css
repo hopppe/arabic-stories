@@ -227,4 +227,93 @@
   .pageTitle {
     font-size: var(--font-size-large);
   }
+}
+
+/* Auth Required Container */
+.authRequiredContainer {
+  max-width: 600px;
+  margin: 3rem auto;
+  padding: var(--spacing-xl);
+  background-color: var(--card-background);
+  border-radius: var(--border-radius-medium);
+  text-align: center;
+  box-shadow: var(--shadow-medium);
+}
+
+.authRequiredContainer h1 {
+  margin-top: 0;
+  margin-bottom: var(--spacing-md);
+  color: var(--text-primary);
+}
+
+.authRequiredContainer p {
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xl);
+  line-height: 1.6;
+}
+
+.buttonGroup {
+  display: flex;
+  justify-content: center;
+  gap: var(--spacing-lg);
+}
+
+.primaryButton, .secondaryButton {
+  padding: var(--spacing-md) var(--spacing-xl);
+  border-radius: var(--border-radius-small);
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.primaryButton {
+  background-color: var(--primary);
+  color: white;
+  border: none;
+}
+
+.primaryButton:hover {
+  background-color: #0062c9;
+  text-decoration: none;
+}
+
+.secondaryButton {
+  background-color: var(--background);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.secondaryButton:hover {
+  background-color: var(--background-hover);
+  text-decoration: none;
+}
+
+.loadingContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 5rem 0;
+}
+
+.loadingSpinner {
+  width: 40px;
+  height: 40px;
+  margin-bottom: var(--spacing-md);
+  border: 3px solid rgba(0, 113, 227, 0.2);
+  border-radius: 50%;
+  border-left-color: var(--primary);
+  animation: spin 1s linear infinite;
+}
+
+@media (max-width: 600px) {
+  .buttonGroup {
+    flex-direction: column;
+    gap: var(--spacing-md);
+  }
+  
+  .primaryButton, .secondaryButton {
+    width: 100%;
+    text-align: center;
+  }
 } 

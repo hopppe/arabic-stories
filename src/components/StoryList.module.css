@@ -213,4 +213,94 @@
 
 .createStoryButton:active {
   transform: scale(0.98);
+}
+
+.filtersContainer {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+  flex-wrap: wrap;
+}
+
+.filterGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.filterLabel {
+  font-size: var(--font-size-small);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.filterSelect {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius-small);
+  border: 1px solid var(--border-color);
+  background-color: var(--background);
+  font-size: var(--font-size-small);
+  min-width: 150px;
+  cursor: pointer;
+}
+
+.filterSelect:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(0, 125, 250, 0.1);
+}
+
+.paginationContainer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-xl);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.paginationButton {
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--border-radius-small);
+  background-color: var(--primary);
+  color: var(--text-inverse);
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.paginationButton:hover:not(:disabled) {
+  background-color: #0062c9;
+}
+
+.paginationButton:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.paginationButton:disabled {
+  background-color: var(--border-color);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.paginationInfo {
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+@media (max-width: 600px) {
+  .filtersContainer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .filterGroup {
+    width: 100%;
+  }
+  
+  .filterSelect {
+    flex-grow: 1;
+  }
 } 

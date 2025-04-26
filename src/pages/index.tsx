@@ -73,6 +73,13 @@ const Home = () => {
       </section>
       
       <StoryList />
+      
+      {/* Hidden link to the test page - visible only on click in a specific area */}
+      <div style={{ position: 'fixed', bottom: 5, right: 5, width: 10, height: 10, zIndex: 999 }}>
+        <Link href="/test-supabase">
+          <span style={{ fontSize: 0 }}>Test</span>
+        </Link>
+      </div>
     </Layout>
   );
 };

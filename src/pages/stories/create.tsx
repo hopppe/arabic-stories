@@ -1,37 +1,65 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import Link from 'next/link';
 import { Layout } from '../../components/Layout';
 import { generateStory, saveUserStory } from '../../lib/storyService';
+import { useAuth } from '../../lib/auth';
 import styles from '../../styles/CreateStory.module.css';
+import { getStripe, createCheckoutSession } from '../../lib/stripe';
+import { UserStory } from '../../lib/supabase';
 
 const CreateStoryPage: React.FC = () => {
   const router = useRouter();
+  const { user, isPaid, isLoading: authLoading, refreshPaymentStatus } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [processingStep, setProcessingStep] = useState<string | null>(null);
   const [success, setSuccess] = useState('');
+  const [manualRedirectNeeded, setManualRedirectNeeded] = useState(false);
   const [formData, setFormData] = useState({
     difficulty: 'normal',
     dialect: 'hijazi',
     words: '',
   });
   const [error, setError] = useState('');
-  // Add state for password protection
-  const [passwordInput, setPasswordInput] = useState('');
-  const [showPasswordModal, setShowPasswordModal] = useState(true);
-  const [passwordError, setPasswordError] = useState('');
 
   // Only run browser-side code when the component mounts
   useEffect(() => {
     // Check if we're running in a browser
     if (typeof window === 'undefined') return;
     
-    // Check if user has already entered password correctly
-    const hasAccess = localStorage.getItem('storyCreatorAccess') === 'granted';
-    if (hasAccess) {
-      setShowPasswordModal(false);
+    console.log("CreateStoryPage: Initial render auth state:", { 
+      user: !!user, 
+      userId: user?.id, 
+      isPaid,
+      authLoading
+    });
+    
+    // Refresh payment status as soon as component loads
+    if (user) {
+      console.log("CreateStoryPage: User authenticated, user ID:", user.id);
+      console.log("CreateStoryPage: Current payment status:", isPaid);
+      
+      // Always refresh to ensure we have the latest status
+      refreshPaymentStatus().then(hasPaid => {
+        console.log("CreateStoryPage: Payment status refreshed:", hasPaid);
+        
+        // If they're not paid but should be, check again in 1 second
+        // This handles race conditions with session initialization
+        if (!hasPaid) {
+          setTimeout(() => {
+            refreshPaymentStatus().then(secondCheck => {
+              console.log("CreateStoryPage: Second payment check:", secondCheck);
+            });
+          }, 1000);
+        }
+      });
+    } else if (!authLoading) {
+      // If not loading and no user, redirect to login
+      console.log("CreateStoryPage: No user detected, need to redirect");
+      setManualRedirectNeeded(true);
     }
     
-    // Initialize form state from localStorage or URL parameters if needed
+    // Initialize form state from localStorage
     const savedParams = localStorage.getItem('createStoryParams');
     if (savedParams) {
       try {
@@ -43,7 +71,7 @@ const CreateStoryPage: React.FC = () => {
         console.error('Error parsing saved parameters:', e);
       }
     }
-  }, []);
+  }, [user, refreshPaymentStatus, isPaid, authLoading]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -53,27 +81,28 @@ const CreateStoryPage: React.FC = () => {
     });
   };
 
-  // Password validation function
-  const handlePasswordSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (passwordInput === 'saudisun') {
-      // Store in localStorage that user has entered correct password
-      localStorage.setItem('storyCreatorAccess', 'granted');
-      setShowPasswordModal(false);
-      setPasswordError('');
-    } else {
-      setPasswordError('Incorrect password. Please try again.');
-    }
-  };
-
-  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPasswordInput(e.target.value);
-    if (passwordError) setPasswordError('');
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (typeof window === 'undefined') return; // Skip on server-side
+    
+    // Check if user is authenticated and has paid
+    console.log("Create story form submitted - Auth state:", { user: !!user, isPaid });
+    
+    if (!user) {
+      console.log("User not authenticated, redirecting to login");
+      // Save form data to localStorage for when they return
+      localStorage.setItem('createStoryParams', JSON.stringify(formData));
+      window.location.href = '/login?returnTo=/stories/create';
+      return;
+    }
+    
+    if (!isPaid) {
+      console.log("User not paid, redirecting to signup");
+      // Save form data to localStorage for when they return
+      localStorage.setItem('createStoryParams', JSON.stringify(formData));
+      window.location.href = '/signup';
+      return;
+    }
     
     setIsSubmitting(true);
     setError('');
@@ -101,172 +130,300 @@ const CreateStoryPage: React.FC = () => {
         return;
       }
 
+      // Set up a timeout to prevent infinite hanging
+      const timeoutDuration = 60000; // 1 minute
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Operation timed out. Please try again.'));
+        }, timeoutDuration);
+      });
+
       try {
         // Generate story using our service
+        console.log('Starting story generation process...');
         setProcessingStep('Generating story with AI...');
-        const storyData = await generateStory({
-          difficulty: formData.difficulty as 'simple' | 'easy' | 'normal',
-          dialect: formData.dialect as 'hijazi' | 'saudi' | 'jordanian' | 'egyptian',
-          words: wordsToInclude,
-        });
+        
+        // Race the story generation against the timeout
+        const storyData = await Promise.race([
+          generateStory({
+            difficulty: formData.difficulty as 'simple' | 'easy' | 'normal',
+            dialect: formData.dialect as 'hijazi' | 'saudi' | 'jordanian' | 'egyptian',
+            words: wordsToInclude,
+            userId: user.id, // Add user ID to story data
+          }),
+          timeoutPromise
+        ]) as UserStory;
+        
+        console.log('Story generated successfully with ID:', storyData.id);
+        console.log('Now attempting to save story to database...');
 
-        // Save to Supabase
+        // Save to Supabase with timeout protection
         setProcessingStep('Saving story to database...');
-        await saveUserStory(storyData);
-        
-        // Show success message
+        try {
+          console.log('Calling saveUserStory with user ID:', user.id);
+          
+          // Race the save operation against a timeout
+          await Promise.race([
+            saveUserStory(storyData),
+            new Promise((_, reject) => {
+              setTimeout(() => {
+                reject(new Error('Database save operation timed out. Your story was generated but could not be saved.'));
+              }, timeoutDuration);
+            })
+          ]);
+          
+          console.log('Story saved successfully!');
+          // Show success message
+          setProcessingStep(null);
+          setSuccess('Story created successfully! Redirecting to stories page...');
+          
+          // Redirect to stories page after a short delay
+          setTimeout(() => {
+            router.push('/stories');
+          }, 2000);
+        } catch (saveError: any) {
+          console.error('Error saving story to database:', saveError);
+          setProcessingStep(null);
+          
+          // Check for permission/auth errors specifically
+          if (saveError.message.includes('permission') || 
+              saveError.message.includes('auth') || 
+              saveError.message.includes('not authenticated')) {
+            setError('Permission denied. Please sign out and sign in again to fix this issue.');
+          } else if (saveError.message.includes('duplicate')) {
+            setError('A story with this ID already exists. Please try again.');
+          } else if (saveError.message.includes('timeout')) {
+            setError('Database operation timed out. Your story was generated but couldn\'t be saved to your account.');
+          } else {
+            setError(`Database error: ${saveError.message || 'Failed to save the story'}. Please try again.`);
+          }
+        }
+      } catch (genError: any) {
+        console.error('Error generating story:', genError);
         setProcessingStep(null);
-        setSuccess('Story created successfully! Redirecting to stories page...');
         
-        // Redirect to stories page after a short delay
-        setTimeout(() => {
-          router.push('/stories');
-        }, 2000);
-      } catch (err: any) {
-        console.error('Error creating story:', err);
-        setProcessingStep(null);
-        
-        // Handle different types of errors
-        if (err.message.includes('network') || err.message.includes('connection')) {
-          setError('Network error. Please check your internet connection and try again.');
-        } else if (err.message.includes('permission') || err.message.includes('auth')) {
-          setError('Permission denied. Please refresh the page and try again.');
-        } else if (err.message.includes('API key')) {
-          setError('OpenAI API key is missing or invalid. Please check your configuration.');
-        } else if (err.message.includes('not initialized')) {
-          setError('Client not initialized. This feature only works in the browser.');
+        if (genError.message.includes('timeout')) {
+          setError('The operation timed out. Please try again with fewer or simpler words.');
         } else {
-          setError(err.message || 'Failed to create story. Please try again.');
+          setError(`Error generating story: ${genError.message || 'An unknown error occurred'}. Please try again.`);
         }
       }
-    } catch (err: any) {
-      console.error('Unexpected error:', err);
+    } catch (error: any) {
+      console.error('Unexpected error in form submission:', error);
       setProcessingStep(null);
-      setError('An unexpected error occurred. Please try again.');
+      setError(`An unexpected error occurred: ${error.message || 'Unknown error'}. Please try again.`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  return (
-    <Layout title="Create Story | Arabic Stories">
-      {showPasswordModal ? (
-        <div className={styles.passwordModalOverlay}>
-          <div className={styles.passwordModal}>
-            <h2>Password Required</h2>
-            <p>AI story generation costs money, this feature is password protected.</p>
-            <form onSubmit={handlePasswordSubmit}>
-              <div className={styles.formGroup}>
-                <label htmlFor="password">Password:</label>
-                <input
-                  type="password"
-                  id="password"
-                  value={passwordInput}
-                  onChange={handlePasswordChange}
-                  className={styles.passwordInput}
-                  autoFocus
-                />
-              </div>
-              {passwordError && <div className={styles.passwordError}>{passwordError}</div>}
-              <div className={styles.modalButtons}>
-                <button type="button" onClick={() => router.push('/stories')} className={styles.cancelButton}>
-                  Cancel
-                </button>
-                <button type="submit" className={styles.submitButton}>
-                  Submit
-                </button>
-              </div>
-            </form>
+  // Handle manual redirection
+  const redirectToLogin = () => {
+    if (typeof window !== 'undefined') {
+      // Save form state
+      localStorage.setItem('createStoryParams', JSON.stringify(formData));
+      // Redirect to login with returnTo parameter
+      window.location.href = '/login?returnTo=/stories/create';
+    }
+  };
+
+  // Show loading state with animated spinner while checking auth
+  if (authLoading) {
+    return (
+      <Layout title="Create Story | Arabic Stories">
+        <div className={styles.loadingContainer}>
+          <div className={styles.loadingSpinner}></div>
+          <p>Loading authentication state...</p>
+        </div>
+      </Layout>
+    );
+  }
+
+  // If manual redirect is needed (no user detected)
+  if (manualRedirectNeeded) {
+    return (
+      <Layout title="Create Story | Arabic Stories">
+        <div className={styles.authRequiredContainer}>
+          <h1>Login Required</h1>
+          <p>You need to log in to create stories. The create story feature requires a one-time payment of $5 to help offset AI costs.</p>
+          <div className={styles.buttonGroup}>
+            <button 
+              onClick={redirectToLogin}
+              className={styles.primaryButton}
+            >
+              Go to Login Page
+            </button>
           </div>
         </div>
-      ) : (
-        <div className={styles.createStoryContainer}>
-          <h1 className={styles.pageTitle}>Create Your Arabic Story</h1>
-          <p className={styles.pageDescription}>
-            Customize your story with difficulty level, dialect preference, and words you want to learn.
-          </p>
-          
-          {error && <div className={styles.errorMessage}>{error}</div>}
-          {success && <div className={styles.successMessage}>{success}</div>}
-          {processingStep && (
-            <div className={styles.processingMessage}>
-              <div className={styles.processingSpinner}></div>
-              <p>{processingStep}</p>
-            </div>
-          )}
-          
-          <form onSubmit={handleSubmit} className={styles.storyForm}>
-            <div className={styles.formGroup}>
-              <label htmlFor="difficulty" className={styles.label}>Story Difficulty</label>
-              <select 
-                id="difficulty" 
-                name="difficulty" 
-                value={formData.difficulty}
-                onChange={handleInputChange}
-                className={styles.select}
-                disabled={isSubmitting}
-                required
-              >
-                <option value="simple">Simple</option>
-                <option value="easy">Easy</option>
-                <option value="normal">Normal</option>
-              </select>
-              <p className={styles.fieldDescription}>
-                Choose the difficulty level of your story.
-              </p>
-            </div>
-            
-            <div className={styles.formGroup}>
-              <label htmlFor="dialect" className={styles.label}>Arabic Dialect</label>
-              <select 
-                id="dialect" 
-                name="dialect" 
-                value={formData.dialect}
-                onChange={handleInputChange}
-                className={styles.select}
-                disabled={isSubmitting}
-                required
-              >
-                <option value="hijazi">Hijazi</option>
-                <option value="saudi">Saudi</option>
-                <option value="jordanian">Jordanian</option>
-                <option value="egyptian">Egyptian</option>
-              </select>
-              <p className={styles.fieldDescription}>
-                Select the Arabic dialect for your story.
-              </p>
-            </div>
-            
-            <div className={styles.formGroup}>
-              <label htmlFor="words" className={styles.label}>Words to Include</label>
-              <textarea 
-                id="words" 
-                name="words" 
-                value={formData.words}
-                onChange={handleInputChange}
-                className={styles.textarea}
-                placeholder="Enter words separated by commas, tabs, or new lines"
-                rows={5}
-                disabled={isSubmitting}
-                required
-              ></textarea>
-              <p className={styles.fieldDescription}>
-                Enter Arabic words you'd like to include in your story. Separate words with commas, tabs, or new lines.
-              </p>
-            </div>
-            
-            <div className={styles.formActions}>
-              <button 
-                type="submit" 
-                className={styles.submitButton}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? 'Creating Story...' : 'Create Story'}
-              </button>
-            </div>
-          </form>
+      </Layout>
+    );
+  }
+
+  // If not authenticated, show login required
+  if (!user) {
+    return (
+      <Layout title="Create Story | Arabic Stories">
+        <div className={styles.authRequiredContainer}>
+          <h1>Login Required</h1>
+          <p>You need to log in to create stories. The create story feature requires a one-time payment of $5 to help offset AI costs.</p>
+          <div className={styles.buttonGroup}>
+            <button 
+              onClick={redirectToLogin}
+              className={styles.primaryButton}
+            >
+              Go to Login Page
+            </button>
+          </div>
         </div>
-      )}
+      </Layout>
+    );
+  }
+
+  // If authenticated but not paid, show payment required
+  if (!isPaid) {
+    return (
+      <Layout title="Create Story | Arabic Stories">
+        <div className={styles.authRequiredContainer}>
+          <h1>Payment Required</h1>
+          <p>
+            You're logged in as <strong>{user.email}</strong>, but you need to make a payment to create stories.
+          </p>
+          <p>
+            The story creation feature requires a one-time payment of $5 to help offset AI costs.
+            The rest of the site remains free to use.
+          </p>
+          <div className={styles.buttonGroup}>
+            <button 
+              onClick={async () => {
+                try {
+                  // Create checkout session
+                  const { sessionId, error } = await createCheckoutSession(user.id);
+                  
+                  if (error || !sessionId) {
+                    console.error('Failed to create checkout session:', error);
+                    return;
+                  }
+                  
+                  // Redirect to Stripe checkout
+                  const stripe = await getStripe();
+                  if (!stripe) {
+                    console.error('Failed to load Stripe client');
+                    return;
+                  }
+                  
+                  await stripe.redirectToCheckout({ sessionId });
+                } catch (err) {
+                  console.error('Error redirecting to payment:', err);
+                }
+              }}
+              className={styles.primaryButton}
+            >
+              Make Payment
+            </button>
+            <Link href="/stories" className={styles.secondaryButton}>
+              Browse Stories
+            </Link>
+            <button
+              onClick={() => refreshPaymentStatus()}
+              className={styles.secondaryButton}
+            >
+              Refresh Payment Status
+            </button>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // User is authenticated and has paid, show the form
+  return (
+    <Layout title="Create Story | Arabic Stories">
+      <div className={styles.createStoryContainer}>
+        <h1 className={styles.pageTitle}>Create Your Arabic Story</h1>
+        <p className={styles.pageDescription}>
+          Customize your story with difficulty level, dialect preference, and words you want to learn.
+        </p>
+        
+        {error && <div className={styles.errorMessage}>{error}</div>}
+        {success && <div className={styles.successMessage}>{success}</div>}
+        {processingStep && (
+          <div className={styles.processingMessage}>
+            <div className={styles.processingSpinner}></div>
+            <p>{processingStep}</p>
+          </div>
+        )}
+        
+        <form onSubmit={handleSubmit} className={styles.storyForm}>
+          <div className={styles.formGroup}>
+            <label htmlFor="difficulty" className={styles.label}>Story Difficulty</label>
+            <select 
+              id="difficulty" 
+              name="difficulty" 
+              value={formData.difficulty}
+              onChange={handleInputChange}
+              className={styles.select}
+              disabled={isSubmitting}
+              required
+            >
+              <option value="simple">Simple</option>
+              <option value="easy">Easy</option>
+              <option value="normal">Normal</option>
+            </select>
+            <p className={styles.fieldDescription}>
+              Choose the difficulty level of your story.
+            </p>
+          </div>
+          
+          <div className={styles.formGroup}>
+            <label htmlFor="dialect" className={styles.label}>Arabic Dialect</label>
+            <select 
+              id="dialect" 
+              name="dialect" 
+              value={formData.dialect}
+              onChange={handleInputChange}
+              className={styles.select}
+              disabled={isSubmitting}
+              required
+            >
+              <option value="hijazi">Hijazi</option>
+              <option value="saudi">Saudi</option>
+              <option value="jordanian">Jordanian</option>
+              <option value="egyptian">Egyptian</option>
+            </select>
+            <p className={styles.fieldDescription}>
+              Select the Arabic dialect for your story.
+            </p>
+          </div>
+          
+          <div className={styles.formGroup}>
+            <label htmlFor="words" className={styles.label}>Words to Include</label>
+            <textarea 
+              id="words" 
+              name="words" 
+              value={formData.words}
+              onChange={handleInputChange}
+              className={styles.textarea}
+              placeholder="Enter words separated by commas, tabs, or new lines"
+              rows={5}
+              disabled={isSubmitting}
+              required
+            ></textarea>
+            <p className={styles.fieldDescription}>
+              Enter Arabic words you'd like to include in your story. Separate words with commas, tabs, or new lines.
+            </p>
+          </div>
+          
+          <div className={styles.formActions}>
+            <button 
+              type="submit" 
+              className={styles.submitButton}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Creating Story...' : 'Create Story'}
+            </button>
+          </div>
+        </form>
+      </div>
     </Layout>
   );
 };

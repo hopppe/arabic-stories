@@ -1,5 +1,6 @@
 import React from 'react';
 import Head from 'next/head';
+import Link from 'next/link';
 import { Navigation } from './Navigation';
 import styles from './Layout.module.css';
 
@@ -44,9 +45,9 @@ export const Layout: React.FC<LayoutProps> = ({
             <div className={styles.footerLinkColumn}>
               <h3 className={styles.footerLinkHeading}>Navigate</h3>
               <ul className={styles.footerLinkList}>
-                <li><a href="/">Home</a></li>
-                <li><a href="/stories">Stories</a></li>
-                <li><a href="/about">About</a></li>
+                <li><Link href="/">Home</Link></li>
+                <li><Link href="/stories">Stories</Link></li>
+                <li><Link href="/about">About</Link></li>
               </ul>
             </div>
           </div>

@@ -1,9 +1,13 @@
 import React from 'react';
 import { Layout } from '../../components/Layout';
 import { StoryList } from '../../components/StoryList';
+import { UserStoryList } from '../../components/UserStoryList';
+import { useAuth } from '../../lib/auth';
 import styles from '../../styles/Stories.module.css';
 
 const StoriesPage = () => {
+  const { user } = useAuth();
+  
   return (
     <Layout
       title="Arabic Stories | Browse All Stories"
@@ -19,11 +23,19 @@ const StoriesPage = () => {
           </div>
         </div>
         
-        {/* Display user-generated stories first */}
+        {/* Display user's own created stories if logged in */}
+        {user && (
+          <UserStoryList
+            title="Your Created Stories"
+            subtitle="Stories you've created with your chosen vocabulary words"
+          />
+        )}
+        
+        {/* Display community user-generated stories */}
         <StoryList 
           showUserStories={true} 
-          title="Your Created Stories" 
-          subtitle="Stories you've created with your chosen vocabulary words"
+          title="Created Stories" 
+          subtitle="Stories created by users with chosen vocabulary words"
         />
         
         {/* Display built-in stories */}
