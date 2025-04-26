@@ -17,9 +17,8 @@ const AuthCallbackPage = () => {
   };
 
   useEffect(() => {
-    const { hash } = window.location;
-    
-    const handleCallback = async () => {
+    // Check if we need to process the auth callback
+    const processAuth = async () => {
       try {
         addLog('Auth callback started');
         const supabase = getSupabase();
@@ -28,92 +27,28 @@ const AuthCallbackPage = () => {
         }
         addLog('Supabase client initialized');
 
-        // Process the OAuth callback
-        const { data, error } = await supabase.auth.getUser();
+        // Process the OAuth callback response
+        const { data: authData, error: authError } = await supabase.auth.getSession();
         
-        if (error) {
-          addLog(`Error getting user: ${error.message}`);
-          throw error;
+        if (authError) {
+          addLog(`Auth session error: ${authError.message}`);
+          throw authError;
         }
         
-        if (data?.user) {
-          addLog(`User authenticated: ${data.user.id}`);
+        if (!authData.session || !authData.session.user) {
+          // Try to get user directly if session doesn't have it
+          const { data: userData, error: userError } = await supabase.auth.getUser();
           
-          // Create a profile record if it doesn't exist
-          try {
-            addLog('Creating/updating user profile');
-            await supabase
-              .from('profiles')
-              .upsert({ 
-                id: data.user.id,
-                email: data.user.email,
-                created_at: new Date().toISOString(),
-                has_paid: false
-              });
-            addLog('Profile record created/updated');
-          } catch (profileErr) {
-            addLog(`Warning: Error with profile creation: ${String(profileErr)}`);
-            // Continue despite profile creation error
+          if (userError || !userData.user) {
+            addLog(`Error getting user: ${userError?.message || 'No user found'}`);
+            throw new Error(userError?.message || 'Authentication failed: No user found');
           }
           
-          // Check if the user has already paid
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('has_paid')
-            .eq('id', data.user.id)
-            .single();
-          
-          addLog(`Payment status check: ${profile?.has_paid ? 'Paid' : 'Not paid'}`);
-          
-          // Check if there's a saved returnTo path in session storage
-          const returnTo = sessionStorage.getItem('returnTo');
-          addLog(`Saved returnTo path: ${returnTo || 'none'}`);
-          
-          // If the user has already paid and there's a returnTo path, redirect there
-          if (profile?.has_paid && returnTo) {
-            addLog(`Redirecting to saved path: ${returnTo}`);
-            sessionStorage.removeItem('returnTo');
-            router.push(returnTo);
-            return;
-          }
-          
-          // If the user has already paid, redirect to stories
-          if (profile?.has_paid) {
-            addLog('User already paid, redirecting to stories');
-            router.push('/stories');
-            return;
-          }
-          
-          // Otherwise, redirect to payment
-          addLog('User needs to pay, initiating payment flow');
-          try {
-            addLog('Creating checkout session');
-            const { sessionId, error: checkoutError } = await createCheckoutSession(data.user.id);
-            
-            if (checkoutError || !sessionId) {
-              addLog(`Checkout session creation failed: ${checkoutError}`);
-              throw new Error(`Failed to create checkout session: ${checkoutError}`);
-            }
-            
-            addLog(`Checkout session created: ${sessionId}`);
-            
-            // Redirect to Stripe checkout
-            const stripe = await getStripe();
-            if (!stripe) {
-              addLog('Failed to initialize Stripe client');
-              throw new Error('Failed to load Stripe client. Check your NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY.');
-            }
-            
-            addLog('Redirecting to Stripe checkout...');
-            await stripe.redirectToCheckout({ sessionId });
-          } catch (stripeErr: any) {
-            addLog(`Stripe error: ${stripeErr.message || 'Unknown Stripe error'}`);
-            // If Stripe fails, redirect to signup page as fallback
-            router.push('/signup?stripe_error=' + encodeURIComponent(stripeErr.message || 'Unknown error'));
-          }
+          addLog(`User authenticated via getUser: ${userData.user.id}`);
+          await handleAuthenticatedUser(userData.user);
         } else {
-          addLog('No user data returned, redirecting to login');
-          router.push('/login');
+          addLog(`User authenticated via session: ${authData.session.user.id}`);
+          await handleAuthenticatedUser(authData.session.user);
         }
       } catch (err: any) {
         const errorMsg = err.message || 'Authentication failed';
@@ -127,16 +62,110 @@ const AuthCallbackPage = () => {
         }, 3000);
       }
     };
+    
+    // Handle authenticated user
+    const handleAuthenticatedUser = async (user: any) => {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error('Supabase client not initialized');
+      
+      // Create a profile record if it doesn't exist
+      try {
+        addLog('Creating/updating user profile');
+        await supabase
+          .from('profiles')
+          .upsert({ 
+            id: user.id,
+            email: user.email,
+            created_at: new Date().toISOString(),
+            has_paid: false
+          });
+        addLog('Profile record created/updated');
+      } catch (profileErr) {
+        addLog(`Warning: Error with profile creation: ${String(profileErr)}`);
+        // Continue despite profile creation error
+      }
+      
+      // Check if the user has already paid
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('has_paid')
+        .eq('id', user.id)
+        .single();
+      
+      addLog(`Payment status check: ${profile?.has_paid ? 'Paid' : 'Not paid'}`);
+      
+      // Check if there's a saved returnTo path in session storage
+      let returnTo = null;
+      try {
+        returnTo = sessionStorage.getItem('returnTo');
+        addLog(`Saved returnTo path: ${returnTo || 'none'}`);
+      } catch (storageErr) {
+        addLog(`Warning: Could not access sessionStorage: ${String(storageErr)}`);
+      }
+      
+      // If the user has already paid and there's a returnTo path, redirect there
+      if (profile?.has_paid && returnTo) {
+        addLog(`Redirecting to saved path: ${returnTo}`);
+        try {
+          sessionStorage.removeItem('returnTo');
+        } catch (e) {
+          // Ignore errors clearing session storage
+        }
+        router.push(returnTo);
+        return;
+      }
+      
+      // If the user has already paid, redirect to stories
+      if (profile?.has_paid) {
+        addLog('User already paid, redirecting to stories');
+        router.push('/stories');
+        return;
+      }
+      
+      // Otherwise, redirect to payment
+      addLog('User needs to pay, initiating payment flow');
+      try {
+        addLog('Creating checkout session');
+        const { sessionId, error: checkoutError } = await createCheckoutSession(user.id);
+        
+        if (checkoutError || !sessionId) {
+          addLog(`Checkout session creation failed: ${checkoutError}`);
+          throw new Error(`Failed to create checkout session: ${checkoutError}`);
+        }
+        
+        addLog(`Checkout session created: ${sessionId}`);
+        
+        // Redirect to Stripe checkout
+        const stripe = await getStripe();
+        if (!stripe) {
+          addLog('Failed to initialize Stripe client');
+          throw new Error('Failed to load Stripe client. Check your NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY.');
+        }
+        
+        addLog('Redirecting to Stripe checkout...');
+        await stripe.redirectToCheckout({ sessionId });
+      } catch (stripeErr: any) {
+        addLog(`Stripe error: ${stripeErr.message || 'Unknown Stripe error'}`);
+        // If Stripe fails, redirect to signup page as fallback
+        router.push('/signup?stripe_error=' + encodeURIComponent(stripeErr.message || 'Unknown error'));
+      }
+    };
 
-    // Only process the callback if there's a hash or query parameters
-    if ((hash && window) || Object.keys(router.query).length > 0) {
-      addLog(`Processing auth callback. Hash present: ${Boolean(hash)}`);
-      handleCallback();
-    } else {
-      addLog('No hash or query parameters, redirecting to login');
+    // Check URL parameters to decide if we should process auth
+    const code = router.query.code || 
+                (typeof window !== 'undefined' && 
+                new URLSearchParams(window.location.search).get('code'));
+    const hasCodeParam = Boolean(code);
+    const hasHashFragment = typeof window !== 'undefined' && window.location.hash && window.location.hash.length > 0;
+    
+    if (hasCodeParam || hasHashFragment) {
+      addLog(`Processing auth callback. Code param: ${hasCodeParam} (${code}), Hash: ${Boolean(hasHashFragment)}`);
+      processAuth();
+    } else if (router.isReady) {
+      addLog('No auth parameters detected, redirecting to login');
       router.push('/login');
     }
-  }, [router]);
+  }, [router.isReady, router.query, router.asPath]);
 
   return (
     <Layout title="Processing Login | Arabic Stories">

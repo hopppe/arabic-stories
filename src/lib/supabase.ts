@@ -23,13 +23,16 @@ export const getSupabase = () => {
     try {
       console.log('Creating new Supabase client with URL:', supabaseUrl.substring(0, 15) + '...');
       
+      // Get current origin for site URL
+      const siteUrl = typeof window !== 'undefined' ? window.location.origin : '';
+      
       // Create client with additional options for better compatibility
       supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
         auth: {
           autoRefreshToken: true,
           persistSession: true,
           detectSessionInUrl: true,
-          flowType: 'pkce'  // Use PKCE flow for better security
+          flowType: 'pkce',  // Use PKCE flow for better security
         },
         global: {
           fetch: fetch
@@ -42,7 +45,7 @@ export const getSupabase = () => {
         return null;
       }
       
-      console.log('Supabase client initialized successfully');
+      console.log('Supabase client initialized successfully', { siteUrl });
     } catch (error) {
       console.error('Error creating Supabase client:', error);
       return null;

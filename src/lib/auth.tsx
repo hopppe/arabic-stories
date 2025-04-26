@@ -128,10 +128,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const supabase = getSupabase();
     if (!supabase) return { error: new Error('Supabase client not initialized') };
     
+    // Get current origin to handle both production and development environments
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${origin}/auth/callback`,
       }
     });
     
@@ -142,6 +145,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUp = async (email: string, password: string) => {
     const supabase = getSupabase();
     if (!supabase) return { error: new Error('Supabase client not initialized'), user: null };
+    
+    // Get current origin if we need to set a redirect URL in the future
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
     
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -171,8 +177,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const supabase = getSupabase();
     if (!supabase) return { error: new Error('Supabase client not initialized') };
     
+    // Get current origin to handle both production and development environments
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/reset-password`,
+      redirectTo: `${origin}/auth/reset-password`,
     });
     
     return { error };
