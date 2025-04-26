@@ -12,6 +12,8 @@ export const Navigation: React.FC = () => {
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [showDevOptions, setShowDevOptions] = useState(false);
   const promptTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const navRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   
   // Handle scroll effect for navbar
   useEffect(() => {
@@ -45,6 +47,27 @@ export const Navigation: React.FC = () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (showMobileMenu && 
+          navRef.current && 
+          menuButtonRef.current && 
+          !navRef.current.contains(event.target as Node) &&
+          !menuButtonRef.current.contains(event.target as Node)) {
+        setShowMobileMenu(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [showMobileMenu]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -101,11 +124,12 @@ export const Navigation: React.FC = () => {
           className={styles.mobileMenuButton} 
           onClick={toggleMobileMenu}
           aria-label="Toggle menu"
+          ref={menuButtonRef}
         >
-          <span className={styles.menuIcon}></span>
+          <span className={`${styles.menuIcon} ${showMobileMenu ? styles.open : ''}`}></span>
         </button>
         
-        <nav className={`${styles.nav} ${showMobileMenu ? styles.showMobileNav : ''}`}>
+        <nav ref={navRef} className={`${styles.nav} ${showMobileMenu ? styles.showMobileNav : ''}`}>
           <Link 
             href="/" 
             className={`${styles.navLink} ${router.pathname === '/' ? styles.active : ''}`}
