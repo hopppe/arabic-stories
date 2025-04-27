@@ -4,18 +4,32 @@ import { getSupabase, refreshSupabaseClient } from './supabase';
 
 // Helper function to get the correct site URL for redirects
 const getSiteUrl = (): string => {
-  // Use the NEXT_PUBLIC_SITE_URL environment variable if available
+  // For production, always use the production URL directly
+  if (process.env.NODE_ENV === 'production') {
+    return 'https://arabic-stories.vercel.app';
+  }
+  
+  // For development, return localhost
+  if (process.env.NODE_ENV === 'development') {
+    return 'http://localhost:3000';
+  }
+  
+  // Fallback to environment variable or window.location.origin as last resort
   if (process.env.NEXT_PUBLIC_SITE_URL) {
     return process.env.NEXT_PUBLIC_SITE_URL.trim().replace(/\/$/, '');
   }
   
-  // Fallback to window.location.origin in the browser
   if (typeof window !== 'undefined') {
-    return window.location.origin;
+    // Check if we're on localhost in browser
+    const origin = window.location.origin;
+    if (origin.includes('localhost')) {
+      return 'http://localhost:3000';
+    }
+    return origin;
   }
   
-  // Default fallback for SSR without configured environment
-  return '';
+  // Final fallback for SSR without configured environment
+  return 'https://arabic-stories.vercel.app';
 };
 
 // Define auth context type
@@ -215,15 +229,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       // Get current origin to handle both production and development environments
       const origin = getSiteUrl();
+      const redirectUrl = `${origin}/auth/callback`;
       
-      console.log('Using redirect origin:', origin);
+      console.log('Google Auth - Environment:', process.env.NODE_ENV);
+      console.log('Google Auth - Redirect URL:', redirectUrl);
+      console.log('Google Auth - Origin URL:', origin);
       
+      // Detection for incorrect localhost usage in production
+      if (process.env.NODE_ENV === 'production') {
+        if (redirectUrl.includes('localhost')) {
+          console.error('CRITICAL ERROR: Detected localhost in production redirect URL. This will cause authentication to fail.');
+          console.error('Environment check:', {
+            NODE_ENV: process.env.NODE_ENV,
+            SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || 'not set',
+            window_location: typeof window !== 'undefined' ? window.location.href : 'SSR'
+          });
+          
+          // Force production URL for Google auth
+          const productionRedirectUrl = 'https://arabic-stories.vercel.app/auth/callback';
+          console.log('Forcing production redirect URL:', productionRedirectUrl);
+          
+          const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+              redirectTo: productionRedirectUrl,
+              queryParams: {
+                prompt: 'select_account',
+                access_type: 'offline',
+                from_signup: 'true'
+              }
+            }
+          });
+          
+          if (!error) {
+            setConnectionError(false);
+          }
+          
+          return { error };
+        }
+      }
+      
+      // Normal flow with the correct redirect URL
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${origin}/auth/callback`,
+          redirectTo: redirectUrl,
           queryParams: {
-            // Add a parameter to indicate this is from signup and requires payment redirection
             prompt: 'select_account',
             access_type: 'offline',
             from_signup: 'true'
@@ -251,6 +302,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       // Get current origin if we need to set a redirect URL in the future
       const origin = getSiteUrl();
+      console.log('Signup - Environment:', process.env.NODE_ENV);
+      console.log('Signup - Origin URL:', origin);
+      
+      // Ensure we never use localhost in production
+      if (process.env.NODE_ENV === 'production' && origin.includes('localhost')) {
+        console.error('ERROR: Localhost detected in production origin. Using hardcoded production URL.');
+      }
       
       const { data, error } = await supabase.auth.signUp({
         email,

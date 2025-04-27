@@ -21,6 +21,17 @@ const AuthCallbackPage = () => {
     const processAuth = async () => {
       try {
         addLog('Auth callback started');
+        addLog(`Environment: ${process.env.NODE_ENV}`);
+        
+        // Detect if we're on localhost in production and show a warning
+        if (process.env.NODE_ENV === 'production' && 
+            typeof window !== 'undefined' && 
+            window.location.origin.includes('localhost')) {
+          addLog('CRITICAL ERROR: Detected localhost in production environment. Authentication will fail.');
+          addLog('This indicates the callback URL in Supabase auth was set incorrectly.');
+          addLog('The authorization might continue, but will likely redirect back to localhost after completion.');
+        }
+        
         const supabase = getSupabase();
         if (!supabase) {
           throw new Error('Supabase client not initialized');
@@ -211,6 +222,15 @@ const AuthCallbackPage = () => {
       addLog(`Full URL: ${typeof window !== 'undefined' ? window.location.href : 'SSR'}`);
       addLog(`Environment: ${process.env.NODE_ENV}`);
       addLog(`NEXT_PUBLIC_SITE_URL: ${process.env.NEXT_PUBLIC_SITE_URL || 'not set'}`);
+      
+      // Detect localhost in production and log a warning
+      if (process.env.NODE_ENV === 'production' && 
+          typeof window !== 'undefined' && 
+          window.location.origin.includes('localhost')) {
+        addLog('CRITICAL ERROR: Detected localhost in production environment. Authentication will fail.');
+        addLog('This indicates the callback URL in Supabase auth was set incorrectly.');
+        addLog('The authorization might continue, but will likely redirect back to localhost after completion.');
+      }
       
       processAuth();
     } else if (router.isReady) {
