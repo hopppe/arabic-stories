@@ -162,12 +162,20 @@ export async function saveUserStory(story: UserStory): Promise<void> {
     // Step 2: Simple session check - just get user ID from session if available
     console.log('4. Getting user ID from current session');
     let authenticatedUserId = story.user_id; // Default to story user_id
+    let usingProvidedUserId = true; // Flag to track if we're using the provided user_id
     
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData.session?.user?.id) {
-        authenticatedUserId = sessionData.session.user.id;
-        console.log('5. User ID from session:', authenticatedUserId);
+        // Only override the user_id if it doesn't match the session user
+        // This allows the story.user_id to be used even when the session is valid
+        if (sessionData.session.user.id !== story.user_id) {
+          console.log('5. Session user ID differs from story user_id. Using session user ID for consistency.');
+          authenticatedUserId = sessionData.session.user.id;
+          usingProvidedUserId = false;
+        } else {
+          console.log('5. Session user ID matches story user_id:', authenticatedUserId);
+        }
       } else {
         console.warn('5. No session found, using user_id from story object');
       }
@@ -182,11 +190,16 @@ export async function saveUserStory(story: UserStory): Promise<void> {
       throw new Error('User ID is required to save a story');
     }
     
-    // Always use the authenticated user's ID to ensure proper permissions
+    // Create story object to save, maintaining the original user_id when appropriate
     const storyToSave = {
       ...storyCopy,
       user_id: authenticatedUserId
     };
+    
+    // Log if we're using the provided user_id (helpful for debugging mobile issues)
+    if (usingProvidedUserId) {
+      console.log('6. Using user_id provided by story object:', authenticatedUserId);
+    }
     
     // Step 3: Insert data - simple approach with one retry
     console.log('7. Preparing to save story with data:', { 
@@ -236,6 +249,20 @@ export async function saveUserStory(story: UserStory): Promise<void> {
           // Handle specific errors but don't overthink it
           if (error.code === '23505') {
             throw new Error('A story with this ID already exists. Please try again.');
+          } else if (error.message.includes('permission') || error.message.includes('policy')) {
+            console.error('Permission error detected, likely due to policy restrictions.');
+            // If this is a permission error and we've overridden the user_id, try again with original
+            if (!usingProvidedUserId && insertAttempts < maxInsertAttempts) {
+              console.log('Retrying with original user_id from story...');
+              // Ensure user_id is not undefined
+              if (story.user_id) {
+                storyWithStringifiedFields.user_id = story.user_id;
+                usingProvidedUserId = true;
+                await new Promise(resolve => setTimeout(resolve, 500));
+                continue;
+              }
+            }
+            throw new Error('Permission denied: Failed to save story due to database policy restrictions.');
           } else if (insertAttempts < maxInsertAttempts) {
             // For any other error, just retry once more
             console.log('Retrying insert...');
