@@ -2,41 +2,31 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { Layout } from '../../components/Layout';
-import { generateStory, saveUserStory } from '../../lib/storyService';
+import { generateStory, saveUserStory } from '../../lib/storyManager';
 import { useAuth } from '../../lib/auth';
 import styles from '../../styles/CreateStory.module.css';
 import { getStripe, createCheckoutSession } from '../../lib/stripe';
 import { UserStory } from '../../lib/supabase';
 
-// Add this function before the main component
+// Debug function for localStorage
 function debugLocalStorage() {
-  if (typeof window === 'undefined') return;
-  
   try {
-    const keys = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key) keys.push(key);
-    }
-    
-    console.log('LocalStorage Debug - Keys:', keys);
-    
-    const pendingStory = localStorage.getItem('pendingStory');
-    if (pendingStory) {
-      try {
-        const parsed = JSON.parse(pendingStory);
-        console.log('LocalStorage Debug - Pending Story:', {
-          id: parsed.id,
-          title: parsed.title,
-          has_content: !!parsed.content,
-          user_id: parsed.user_id,
-          recovery_info: {
-            timestamp: parsed.recovery_timestamp,
-            reason: parsed.recovery_reason
-          }
-        });
-      } catch (e) {
-        console.error('LocalStorage Debug - Error parsing pendingStory:', e);
+    if (typeof window !== 'undefined') {
+      const pendingStory = localStorage.getItem('pendingStory');
+      if (pendingStory) {
+        try {
+          const parsed = JSON.parse(pendingStory);
+          console.log('LocalStorage Debug - Found pendingStory:', {
+            id: parsed.id,
+            title: parsed.title?.english,
+            recovery_timestamp: parsed.recovery_timestamp,
+            recovery_reason: parsed.recovery_reason
+          });
+        } catch (e) {
+          console.error('LocalStorage Debug - Failed to parse pendingStory:', e);
+        }
+      } else {
+        console.log('LocalStorage Debug - No pendingStory found');
       }
     } else {
       console.log('LocalStorage Debug - No pendingStory found');
@@ -48,7 +38,7 @@ function debugLocalStorage() {
 
 const CreateStoryPage: React.FC = () => {
   const router = useRouter();
-  const { user, isPaid, isLoading: authLoading, refreshPaymentStatus, recoverConnection } = useAuth();
+  const { user, isPaid, isLoading: authLoading, validateSession } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [processingStep, setProcessingStep] = useState<string | null>(null);
   const [success, setSuccess] = useState('');
@@ -78,23 +68,18 @@ const CreateStoryPage: React.FC = () => {
       authLoading
     });
     
-    // Refresh payment status as soon as component loads
+    // Validate session as soon as component loads
     if (user) {
       console.log("CreateStoryPage: User authenticated, user ID:", user.id);
       console.log("CreateStoryPage: Current payment status:", isPaid);
       
-      // Always refresh to ensure we have the latest status
-      refreshPaymentStatus().then(hasPaid => {
-        console.log("CreateStoryPage: Payment status refreshed:", hasPaid);
+      // Always validate to ensure the session is active
+      validateSession().then(isValid => {
+        console.log("CreateStoryPage: Session validation result:", isValid);
         
-        // If they're not paid but should be, check again in 1 second
-        // This handles race conditions with session initialization
-        if (!hasPaid) {
-          setTimeout(() => {
-            refreshPaymentStatus().then(secondCheck => {
-              console.log("CreateStoryPage: Second payment check:", secondCheck);
-            });
-          }, 1000);
+        // If session is not valid, we might need to redirect
+        if (!isValid) {
+          console.warn("CreateStoryPage: Session is not valid");
         }
       });
     } else if (!authLoading) {
@@ -132,7 +117,7 @@ const CreateStoryPage: React.FC = () => {
         localStorage.removeItem('pendingStory');
       }
     }
-  }, [user, refreshPaymentStatus, isPaid, authLoading]);
+  }, [user, validateSession, isPaid, authLoading]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target as HTMLInputElement;
@@ -226,14 +211,19 @@ const CreateStoryPage: React.FC = () => {
           storyData.user_id = user.id;
           
           // Race the save operation against a shorter timeout
-          await Promise.race([
+          const saveResult = await Promise.race([
             saveUserStory(storyData),
-            new Promise((_, reject) => {
+            new Promise<{ success: false, message: string }>((_, reject) => {
               setTimeout(() => {
                 reject(new Error('Database save operation timed out. Your story was generated but could not be saved.'));
               }, dbTimeoutDuration); // Use shorter timeout for DB operations
             })
           ]);
+          
+          // Check if the save was successful
+          if (!saveResult.success) {
+            throw new Error(saveResult.message || 'Failed to save story to database');
+          }
           
           console.log('Story saved successfully!');
           // Show success message
@@ -405,10 +395,10 @@ const CreateStoryPage: React.FC = () => {
               Browse Stories
             </Link>
             <button
-              onClick={() => refreshPaymentStatus()}
+              onClick={() => validateSession()}
               className={styles.secondaryButton}
             >
-              Refresh Payment Status
+              Refresh Session
             </button>
           </div>
         </div>
@@ -499,7 +489,7 @@ const CreateStoryPage: React.FC = () => {
               disabled={isSubmitting}
             ></textarea>
             <p className={styles.fieldDescription}>
-              Enter a topic or theme for your story (optional). Can be a single word or a brief description.
+             Can be a single word or a brief description.
             </p>
           </div>
           
@@ -516,7 +506,7 @@ const CreateStoryPage: React.FC = () => {
               disabled={isSubmitting}
             ></textarea>
             <p className={styles.fieldDescription}>
-              Enter Arabic words you'd like to include in your story (optional). Separate words with commas, tabs, or new lines.
+              Enter up to 20 Arabic words you'd like to include in your story.
             </p>
           </div>
           
@@ -532,7 +522,7 @@ const CreateStoryPage: React.FC = () => {
                 disabled={isSubmitting}
               />
               <label htmlFor="longStory" className={styles.checkboxLabel}>
-                Generate a longer story (approximately twice the regular length)
+                Generate a longer story
               </label>
             </div>
           </div>
@@ -570,7 +560,11 @@ const CreateStoryPage: React.FC = () => {
                     };
                     
                     console.log('Recovery: Saving story with new ID:', recoveredStory.id);
-                    await saveUserStory(recoveredStory);
+                    const saveResult = await saveUserStory(recoveredStory);
+                    
+                    if (!saveResult.success) {
+                      throw new Error(saveResult.message || 'Failed to save recovered story');
+                    }
                     
                     // Success
                     console.log('Story recovered successfully');

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Layout } from '../../components/Layout';
 import { StoryView } from '../../components/StoryView';
 import { stories } from '../../data/stories';
-import { getUserStoryById } from '../../lib/storyService';
+import { getUserStoryById } from '../../lib/storyManager';
 import { UserStory } from '../../lib/supabase';
 import styles from '../../styles/StoryPage.module.css';
 

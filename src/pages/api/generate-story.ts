@@ -73,7 +73,7 @@ ${wordsToUse.length > 0 ? 'The story must include the given words.' : 'Generate 
 ${topic ? `The story should be about the following topic: "${topic}".` : ''}
 ${longStory ? 'The story should be approximately one and a half times the length of a regular short story and should include more detail.' : ''}
 Create a meaningful title that reflects the content of the story (not just mentioning the dialect or difficulty).
-Provide a sentence-by-sentence English translation of the story.
+Provide a sentence-by-sentence English translation that has aligned line breaks with the Arabic story.
 After that, provide a mapping (gloss) of Arabic words from the story to their English meanings.
 
 Gloss format:

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { getUserCreatedStories } from '../lib/storyService';
+import { getUserCreatedStories } from '../lib/storyManager';
 import { UserStory } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { ConnectionRecovery } from './ConnectionRecovery';
@@ -17,7 +17,7 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
   subtitle = "Stories you've created with your chosen vocabulary words"
 }) => {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, validateSession } = useAuth();
   const [userStories, setUserStories] = useState<UserStory[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +38,15 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
     setConnectionError(false);
     
     try {
+      // Validate session before fetching stories
+      const isSessionValid = await validateSession();
+      if (!isSessionValid) {
+        console.warn('Session validation failed before fetching user stories');
+        setConnectionError(true);
+        setIsLoading(false);
+        return;
+      }
+      
       // Log the user ID we're using to query
       console.log('Fetching stories for user ID:', user.id);
       
@@ -51,7 +60,9 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
       setConnectionError(err.message?.includes('network') || 
                          err.message?.includes('connection') || 
                          err.message?.includes('fetch') ||
-                         err.message?.includes('timeout'));
+                         err.message?.includes('timeout') ||
+                         err.message?.includes('authentication') ||
+                         err.message?.includes('sign in'));
     } finally {
       setIsLoading(false);
     }
@@ -68,57 +79,43 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
     // Retry fetching stories
     fetchUserCreatedStories();
   };
-
-  // Apply filters and pagination
+  
+  // Filter stories based on selected filters
   const filteredStories = userStories.filter(story => {
-    return (
-      (difficultyFilter === 'all' || story.difficulty === difficultyFilter) &&
-      (dialectFilter === 'all' || story.dialect === dialectFilter)
-    );
+    const difficultyMatch = difficultyFilter === 'all' || story.difficulty === difficultyFilter;
+    const dialectMatch = dialectFilter === 'all' || story.dialect === dialectFilter;
+    return difficultyMatch && dialectMatch;
   });
-
-  // Get current stories for pagination
+  
+  // Paginate stories
   const indexOfLastStory = currentPage * storiesPerPage;
   const indexOfFirstStory = indexOfLastStory - storiesPerPage;
   const currentStories = filteredStories.slice(indexOfFirstStory, indexOfLastStory);
+  
+  // Calculate total pages
   const totalPages = Math.ceil(filteredStories.length / storiesPerPage);
-
-  // Page navigation
-  const goToNextPage = () => {
-    setCurrentPage(page => Math.min(page + 1, totalPages));
-  };
-
-  const goToPreviousPage = () => {
-    setCurrentPage(page => Math.max(page - 1, 1));
+  
+  // Handle page navigation
+  const goToPage = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
   };
   
   if (isLoading) {
     return (
       <section className={styles.storyListSection}>
         <div className={styles.storyListContainer}>
-          <h2 className={styles.sectionTitle}>{title}</h2>
-          <div className={styles.loadingIndicator}>Loading your stories...</div>
+          <div className={styles.loadingIndicator}>
+            Loading stories...
+          </div>
         </div>
       </section>
     );
   }
-
-  if (connectionError) {
+  
+  if (error && !connectionError) {
     return (
       <section className={styles.storyListSection}>
         <div className={styles.storyListContainer}>
-          <h2 className={styles.sectionTitle}>{title}</h2>
-          <ConnectionRecovery onRecovered={handleRecoverySuccess} />
-        </div>
-      </section>
-    );
-  }
-
-  if (error) {
-    return (
-      <section className={styles.storyListSection}>
-        <div className={styles.storyListContainer}>
-          <h2 className={styles.sectionTitle}>{title}</h2>
           <div className={styles.errorMessage}>
             {error}
             <button onClick={fetchUserCreatedStories} className={styles.retryButton}>
@@ -129,13 +126,45 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
       </section>
     );
   }
-
-  // If no user stories exist
+  
+  // Show connection recovery if there's a connection error
+  if (connectionError) {
+    return (
+      <section className={styles.storyListSection}>
+        <div className={styles.storyListContainer}>
+          <h2 className={styles.sectionTitle}>{title}</h2>
+          <p className={styles.sectionSubtitle}>{subtitle}</p>
+          <ConnectionRecovery onRecoverySuccess={handleRecoverySuccess} />
+        </div>
+      </section>
+    );
+  }
+  
+  if (!user) {
+    return (
+      <section className={styles.storyListSection}>
+        <div className={styles.storyListContainer}>
+          <h2 className={styles.sectionTitle}>Sign In Required</h2>
+          <p className={styles.sectionSubtitle}>You need to sign in to view your created stories.</p>
+          <div className={styles.emptyStateContainer}>
+            <button 
+              onClick={() => router.push('/login')}
+              className={styles.createStoryButton}
+            >
+              Sign In
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+  
   if (userStories.length === 0) {
     return (
       <section className={styles.storyListSection}>
         <div className={styles.storyListContainer}>
           <h2 className={styles.sectionTitle}>{title}</h2>
+          <p className={styles.sectionSubtitle}>{subtitle}</p>
           <div className={styles.emptyStateContainer}>
             <p className={styles.emptyStateMessage}>You haven't created any stories yet.</p>
             <Link href="/stories/create" className={styles.createStoryButton}>
@@ -146,25 +175,21 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
       </section>
     );
   }
-
+  
   return (
     <section className={styles.storyListSection}>
       <div className={styles.storyListContainer}>
         <h2 className={styles.sectionTitle}>{title}</h2>
         <p className={styles.sectionSubtitle}>{subtitle}</p>
         
-        {/* Filters */}
         <div className={styles.filtersContainer}>
           <div className={styles.filterGroup}>
-            <label htmlFor="difficulty" className={styles.filterLabel}>Difficulty:</label>
+            <label htmlFor="difficulty-filter" className={styles.filterLabel}>Difficulty:</label>
             <select 
-              id="difficulty" 
-              className={styles.filterSelect}
+              id="difficulty-filter"
               value={difficultyFilter}
-              onChange={(e) => {
-                setDifficultyFilter(e.target.value);
-                setCurrentPage(1); // Reset to first page when filter changes
-              }}
+              onChange={(e) => setDifficultyFilter(e.target.value)}
+              className={styles.filterSelect}
             >
               <option value="all">All Difficulties</option>
               <option value="simple">Simple</option>
@@ -175,15 +200,12 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
           </div>
           
           <div className={styles.filterGroup}>
-            <label htmlFor="dialect" className={styles.filterLabel}>Dialect:</label>
+            <label htmlFor="dialect-filter" className={styles.filterLabel}>Dialect:</label>
             <select 
-              id="dialect" 
-              className={styles.filterSelect}
+              id="dialect-filter"
               value={dialectFilter}
-              onChange={(e) => {
-                setDialectFilter(e.target.value);
-                setCurrentPage(1); // Reset to first page when filter changes
-              }}
+              onChange={(e) => setDialectFilter(e.target.value)}
+              className={styles.filterSelect}
             >
               <option value="all">All Dialects</option>
               <option value="hijazi">Hijazi</option>
@@ -195,7 +217,7 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
         </div>
         
         <div className={styles.storyGrid}>
-          {currentStories.map((story) => (
+          {currentStories.map(story => (
             <Link
               href={`/stories/${story.id}`}
               key={story.id}
@@ -203,23 +225,25 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
             >
               <div className={styles.storyContent}>
                 <div className={styles.storyTitleWrapper}>
-                  <h3 className={styles.storyTitle}>{story.title?.english || 'Untitled'}</h3>
-                  <h4 className={styles.storyArabicTitle}>{story.title?.arabic || ''}</h4>
+                  <h3 className={styles.storyTitle}>
+                    {story.title.english}
+                  </h3>
+                  <h4 className={styles.storyArabicTitle}>
+                    {story.title.arabic}
+                  </h4>
                 </div>
                 <p className={styles.storyPreview}>
-                  {story.content?.english && story.content.english[0] 
-                    ? story.content.english[0].substring(0, 120) + (story.content.english[0].length > 120 ? '...' : '')
-                    : 'No preview available'}
+                  {truncateText(story.content.english[0], 120)}
                 </p>
                 <div className={styles.storyMeta}>
                   <span className={styles.storyDifficulty}>
-                    {story.difficulty || 'normal'}
+                    {story.difficulty.charAt(0).toUpperCase() + story.difficulty.slice(1)}
                   </span>
                   <span className={styles.storyDialect}>
-                    {story.dialect || 'standard'}
+                    {story.dialect.charAt(0).toUpperCase() + story.dialect.slice(1)}
                   </span>
                   <span className={styles.paragraphCount}>
-                    {story.content?.english?.length || 0} paragraphs
+                    {`${story.content.english.length} paragraphs`}
                   </span>
                   <span className={styles.readMoreLink}>Read story</span>
                 </div>
@@ -233,7 +257,7 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
           <div className={styles.paginationContainer}>
             <button 
               className={styles.paginationButton} 
-              onClick={goToPreviousPage}
+              onClick={() => goToPage(currentPage - 1)}
               disabled={currentPage === 1}
             >
               Previous
@@ -243,7 +267,7 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
             </span>
             <button 
               className={`${styles.paginationButton} ${styles.seeMoreButton}`}
-              onClick={goToNextPage}
+              onClick={() => goToPage(currentPage + 1)}
               disabled={currentPage === totalPages}
             >
               {currentPage === 1 ? "See More Stories" : "Next"}
@@ -253,4 +277,11 @@ export const UserStoryList: React.FC<UserStoryListProps> = ({
       </div>
     </section>
   );
-}; 
+};
+
+// Helper function to truncate text
+function truncateText(text: string, maxLength: number): string {
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength) + '...';
+} 

@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { getSupabase, refreshSupabaseClient } from './supabase';
+import { getSupabase, refreshSupabaseClient, ensureValidSession } from './supabase';
+import { useRouter } from 'next/router';
 
 // Helper function to get the correct site URL for redirects
 const getSiteUrl = (): string => {
@@ -32,35 +33,38 @@ const getSiteUrl = (): string => {
   return 'https://arabic-stories.vercel.app';
 };
 
-// Define auth context type
+// Create context for authentication
 type AuthContextType = {
   user: User | null;
   session: Session | null;
   isLoading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signInWithGoogle: () => Promise<{ error: any }>;
-  signUp: (email: string, password: string) => Promise<{ error: any, user: User | null }>;
-  signOut: () => Promise<{ error: any }>;
-  resetPassword: (email: string) => Promise<{ error: any }>;
   isPaid: boolean;
-  refreshPaymentStatus: () => Promise<boolean>;
+  connectionError: boolean;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signInWithGoogle: () => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string) => Promise<{ error: Error | null; user: User | null }>;
+  signOut: () => Promise<{ error: Error | null }>;
   recoverConnection: () => Promise<boolean>;
+  validateSession: () => Promise<boolean>;
 };
 
-// Create auth context with default values
+// Create context with default values
 const AuthContext = createContext<AuthContextType>({
   user: null,
   session: null,
   isLoading: true,
-  signIn: () => Promise.resolve({ error: null }),
-  signInWithGoogle: () => Promise.resolve({ error: null }),
-  signUp: () => Promise.resolve({ error: null, user: null }),
-  signOut: () => Promise.resolve({ error: null }),
-  resetPassword: () => Promise.resolve({ error: null }),
   isPaid: false,
-  refreshPaymentStatus: () => Promise.resolve(false),
-  recoverConnection: () => Promise.resolve(false),
+  connectionError: false,
+  signIn: async () => ({ error: new Error('Not implemented') }),
+  signInWithGoogle: async () => ({ error: new Error('Not implemented') }),
+  signUp: async () => ({ error: new Error('Not implemented'), user: null }),
+  signOut: async () => ({ error: new Error('Not implemented') }),
+  recoverConnection: async () => false,
+  validateSession: async () => false
 });
+
+// Export hook for using auth context
+export const useAuth = () => useContext(AuthContext);
 
 // Auth provider component
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -69,12 +73,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
   const [isPaid, setIsPaid] = useState(false);
   const [connectionError, setConnectionError] = useState<boolean>(false);
+  const [recoveryAttempts, setRecoveryAttempts] = useState(0);
+  const router = useRouter();
 
-  // Function to initialize Supabase auth
-  const initializeAuth = async () => {
+  // Initialize auth on component mount
+  const initializeAuth = useCallback(async () => {
     try {
+      // Get Supabase client
       const supabase = getSupabase();
       if (!supabase) {
+        console.error("Supabase client not initialized in initializeAuth");
         setConnectionError(true);
         return;
       }
@@ -95,17 +103,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // If user exists, check if they've paid
       if (session?.user) {
         console.log("Auth: checking payment status for user", session.user.id);
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('has_paid')
-          .eq('id', session.user.id)
-          .single();
         
-        if (error) {
-          console.error("Error fetching payment status:", error);
-        } else {
-          console.log("Auth: payment status data:", data);
-          setIsPaid(data?.has_paid === true);
+        // Try up to 3 times to get the payment status
+        let attempts = 0;
+        let success = false;
+        
+        while (attempts < 3 && !success) {
+          attempts++;
+          console.log(`Initial payment status check attempt ${attempts}/3`);
+          
+          try {
+            // Add slight delay between attempts
+            if (attempts > 1) {
+              await new Promise(resolve => setTimeout(resolve, 500 * attempts));
+            }
+            
+            const { data, error } = await supabase
+              .from('profiles')
+              .select('has_paid, id')
+              .eq('id', session.user.id)
+              .single();
+            
+            if (error) {
+              console.error(`Initial payment status check attempt ${attempts} failed:`, error);
+              console.log('Error code:', error.code, 'Message:', error.message);
+              
+              // If profile doesn't exist, create it
+              if (error.code === 'PGRST116' || 
+                  error.message.includes('does not exist') || 
+                  error.message.includes('no rows')) {
+                console.log(`Profile missing for user ${session.user.id}, creating one...`);
+                
+                const { error: upsertError } = await supabase.from('profiles').upsert({ 
+                  id: session.user.id,
+                  email: session.user.email,
+                  created_at: new Date().toISOString(),
+                  has_paid: false
+                });
+                
+                if (upsertError) {
+                  console.error('Failed to create profile:', upsertError);
+                } else {
+                  console.log('Profile created successfully');
+                  setIsPaid(false);
+                  success = true;
+                  break;
+                }
+              }
+            } else {
+              console.log("Initial payment status data received:", data);
+              setIsPaid(data?.has_paid === true);
+              success = true;
+              break;
+            }
+          } catch (attemptError) {
+            console.error(`Exception during attempt ${attempts}:`, attemptError);
+          }
+        }
+        
+        // If all attempts failed, default to unpaid
+        if (!success) {
+          console.warn('All initial payment status check attempts failed, defaulting to unpaid');
+          setIsPaid(false);
         }
       }
 
@@ -118,18 +177,69 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           // When user signs in, check paid status
           if (session?.user) {
-            console.log("Auth state change: checking payment status");
-            const { data, error } = await supabase
-              .from('profiles')
-              .select('has_paid')
-              .eq('id', session.user.id)
-              .single();
+            console.log("Auth state change: checking payment status for user:", session.user.id);
             
-            if (error) {
-              console.error("Error fetching payment status on auth change:", error);
-            } else {
-              console.log("Auth state change: payment status:", data);
-              setIsPaid(data?.has_paid === true);
+            // Try up to 3 times to get the payment status
+            let attempts = 0;
+            let success = false;
+            
+            while (attempts < 3 && !success) {
+              attempts++;
+              console.log(`Payment status check attempt ${attempts}/3`);
+              
+              try {
+                // Add slight delay between attempts
+                if (attempts > 1) {
+                  await new Promise(resolve => setTimeout(resolve, 500 * attempts));
+                }
+                
+                const { data, error } = await supabase
+                  .from('profiles')
+                  .select('has_paid, id')
+                  .eq('id', session.user.id)
+                  .single();
+                
+                if (error) {
+                  console.error(`Payment status check attempt ${attempts} failed:`, error);
+                  console.log('Error code:', error.code, 'Message:', error.message);
+                  
+                  // If profile doesn't exist, create it
+                  if (error.code === 'PGRST116' || 
+                      error.message.includes('does not exist') || 
+                      error.message.includes('no rows')) {
+                    console.log(`Profile missing for user ${session.user.id}, creating one...`);
+                    
+                    const { error: upsertError } = await supabase.from('profiles').upsert({ 
+                      id: session.user.id,
+                      email: session.user.email,
+                      created_at: new Date().toISOString(),
+                      has_paid: false
+                    });
+                    
+                    if (upsertError) {
+                      console.error('Failed to create profile:', upsertError);
+                    } else {
+                      console.log('Profile created successfully');
+                      setIsPaid(false);
+                      success = true;
+                      break;
+                    }
+                  }
+                } else {
+                  console.log("Payment status data received:", data);
+                  setIsPaid(data?.has_paid === true);
+                  success = true;
+                  break;
+                }
+              } catch (attemptError) {
+                console.error(`Exception during attempt ${attempts}:`, attemptError);
+              }
+            }
+            
+            // If all attempts failed, default to unpaid
+            if (!success) {
+              console.warn('All payment status check attempts failed, defaulting to unpaid');
+              setIsPaid(false);
             }
           } else {
             // Reset paid status if logged out
@@ -149,7 +259,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setConnectionError(true);
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  // Validate session before operations
+  const validateSession = useCallback(async (): Promise<boolean> => {
+    try {
+      // First, check if session is valid and refresh if needed
+      const isValid = await ensureValidSession();
+      
+      if (!isValid) {
+        console.log('Session invalid during validation, attempting connection recovery');
+        
+        // If session is invalid, try recovery
+        const recovered = await recoverConnection();
+        
+        if (!recovered) {
+          // If recovery failed and we're on a protected page, redirect to login
+          const isProtectedRoute = router.pathname.startsWith('/dashboard') ||
+                                  router.pathname.startsWith('/my-stories') ||
+                                  router.pathname.startsWith('/create-story');
+          
+          if (isProtectedRoute) {
+            console.log('Session invalid on protected route, redirecting to login');
+            router.push('/login');
+          }
+          
+          setConnectionError(true);
+          return false;
+        }
+      } else {
+        // Valid session, clear any connection error state
+        setConnectionError(false);
+      }
+      
+      return isValid;
+    } catch (error) {
+      console.error('Error validating session:', error);
+      setConnectionError(true);
+      return false;
+    }
+  }, [router]);
 
   useEffect(() => {
     initializeAuth();
@@ -159,17 +308,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (connectionError) {
         console.log("Attempting to recover Supabase connection...");
         recoverConnection();
+      } else {
+        // Even when not in error state, periodically validate session to keep it fresh
+        validateSession();
       }
     }, 30000); // Check every 30 seconds
     
+    // Add event listener for online/offline events
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+    }
+    
     return () => {
       clearInterval(recoveryInterval);
+      
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      }
     };
-  }, [connectionError]);
+  }, [connectionError, initializeAuth, validateSession]);
+
+  // Handle online event
+  const handleOnline = useCallback(() => {
+    console.log('Network connection restored, validating session...');
+    validateSession();
+  }, [validateSession]);
+
+  // Handle offline event
+  const handleOffline = useCallback(() => {
+    console.log('Network connection lost');
+    setConnectionError(true);
+  }, []);
 
   // Recover connection function
-  const recoverConnection = async (): Promise<boolean> => {
+  const recoverConnection = useCallback(async (): Promise<boolean> => {
     console.log("Executing connection recovery...");
+    
+    // Increment recovery attempts
+    setRecoveryAttempts(prev => prev + 1);
+    
     try {
       // Refresh the Supabase client first
       const supabase = refreshSupabaseClient();
@@ -186,8 +365,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
       
+      // If we don't have a session but had one before, try to refresh it
+      if (!data.session && session) {
+        try {
+          console.log("Attempting to refresh expired session");
+          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+          
+          if (refreshError) {
+            console.error("Session refresh failed:", refreshError);
+            return false;
+          }
+          
+          if (!refreshData.session) {
+            console.error("Session refresh returned no session");
+            return false;
+          }
+        } catch (refreshError) {
+          console.error("Error refreshing session:", refreshError);
+          return false;
+        }
+      }
+      
       console.log("Connection recovery succeeded");
       setConnectionError(false);
+      setRecoveryAttempts(0);
       
       // Re-initialize auth
       await initializeAuth();
@@ -196,10 +397,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error("Error during connection recovery:", error);
       return false;
     }
-  };
+  }, [session, initializeAuth]);
 
   // Sign in with email
-  const signIn = async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string) => {
     const supabase = getSupabase();
     if (!supabase) return { error: new Error('Supabase client not initialized') };
     
@@ -217,12 +418,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error("Sign in error:", error);
       setConnectionError(true);
-      return { error };
+      return { error: error as Error };
     }
-  };
+  }, []);
 
   // Sign in with Google
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = useCallback(async () => {
     const supabase = getSupabase();
     if (!supabase) return { error: new Error('Supabase client not initialized') };
     
@@ -290,12 +491,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error("Google sign in error:", error);
       setConnectionError(true);
-      return { error };
+      return { error: error as Error };
     }
-  };
+  }, []);
 
   // Sign up with email
-  const signUp = async (email: string, password: string) => {
+  const signUp = useCallback(async (email: string, password: string) => {
     const supabase = getSupabase();
     if (!supabase) return { error: new Error('Supabase client not initialized'), user: null };
     
@@ -321,138 +522,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       });
       
-      if (!error) {
-        setConnectionError(false);
+      if (error) {
+        return { error, user: null };
       }
       
-      return { error, user: data.user };
-    } catch (error) {
-      console.error("Sign up error:", error);
-      setConnectionError(true);
-      return { error: error instanceof Error ? error : new Error('Unknown error during signup'), user: null };
-    }
-  };
-
-  // Sign out
-  const signOut = async () => {
-    try {
-      // First try with a refreshed client
-      const supabase = refreshSupabaseClient();
-      if (!supabase) {
-        console.error('Could not initialize Supabase client for signout');
-        return { error: new Error('Supabase client not initialized') };
-      }
-      
-      // Sign out from Supabase
-      const { error } = await supabase.auth.signOut();
-      
-      // Clear stored session data aggressively
-      if (typeof window !== 'undefined') {
+      if (data.user) {
         try {
-          // Clear all potential auth storage keys
-          localStorage.removeItem('arabic-stories-auth');
-          localStorage.removeItem('supabase.auth.token');
-          
-          // Clear any cookies by setting expired date
-          document.cookie.split(";").forEach(function(c) {
-            document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+          // Create profile record
+          await supabase.from('profiles').upsert({ 
+            id: data.user.id,
+            email: data.user.email,
+            created_at: new Date().toISOString(),
+            has_paid: false
           });
           
-          // Wait a bit for cookies to clear
-          await new Promise(resolve => setTimeout(resolve, 100));
-          
-          // Reset auth state
-          setUser(null);
-          setSession(null);
-          setIsPaid(false);
-        } catch (e) {
-          console.warn("Error clearing local storage:", e);
+          console.log('Created profile for new user:', data.user.id);
+        } catch (profileError) {
+          console.error('Error creating profile for new user:', profileError);
+          // Don't fail signup if profile creation fails
         }
       }
       
-      console.log("Sign out completed, error:", error);
+      return { error: null, user: data.user };
+    } catch (error) {
+      console.error('Error during sign up:', error);
+      return { error: error as Error, user: null };
+    }
+  }, []);
+
+  // Sign out current user
+  const signOut = useCallback(async () => {
+    const supabase = getSupabase();
+    if (!supabase) return { error: new Error('Supabase client not initialized') };
+    
+    try {
+      const { error } = await supabase.auth.signOut();
       
-      // Force refresh of client on next use
-      refreshSupabaseClient();
+      if (!error) {
+        // Clear user state on successful signout
+        setUser(null);
+        setSession(null);
+        setIsPaid(false);
+        
+        // Redirect to home page
+        router.push('/');
+      }
       
       return { error };
     } catch (error) {
       console.error("Sign out error:", error);
-      return { error };
+      return { error: error as Error };
     }
-  };
-
-  // Reset password
-  const resetPassword = async (email: string) => {
-    const supabase = getSupabase();
-    if (!supabase) return { error: new Error('Supabase client not initialized') };
-    
-    try {
-      // Get current origin to handle both production and development environments
-      const origin = getSiteUrl();
-      
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${origin}/auth/reset-password`,
-      });
-      
-      return { error };
-    } catch (error) {
-      console.error("Reset password error:", error);
-      return { error };
-    }
-  };
-
-  // Update profile with payment status
-  const updatePaymentStatus = async (hasPaid: boolean) => {
-    if (!user) return { error: new Error('User not authenticated') };
-    
-    const supabase = getSupabase();
-    if (!supabase) return { error: new Error('Supabase client not initialized') };
-    
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({ id: user.id, has_paid: hasPaid });
-      
-      if (!error) {
-        setIsPaid(hasPaid);
-      }
-      
-      return { error };
-    } catch (error) {
-      console.error("Update payment status error:", error);
-      return { error };
-    }
-  };
-
-  // Check and update payment status from database
-  const refreshPaymentStatus = async (): Promise<boolean> => {
-    if (!user) return false;
-    
-    const supabase = getSupabase();
-    if (!supabase) return false;
-    
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('has_paid')
-        .eq('id', user.id)
-        .single();
-      
-      if (error) {
-        console.error('Error refreshing payment status:', error);
-        return isPaid;
-      }
-      
-      const hasPaid = data?.has_paid === true;
-      console.log('Refreshed payment status:', { hasPaid, data });
-      setIsPaid(hasPaid);
-      return hasPaid;
-    } catch (error) {
-      console.error('Exception refreshing payment status:', error);
-      return isPaid;
-    }
-  };
+  }, [router]);
 
   return (
     <AuthContext.Provider
@@ -460,14 +581,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         session,
         isLoading,
+        isPaid,
+        connectionError,
         signIn,
         signInWithGoogle,
         signUp,
         signOut,
-        resetPassword,
-        isPaid,
-        refreshPaymentStatus,
         recoverConnection,
+        validateSession
       }}
     >
       {children}
@@ -475,11 +596,4 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-// Custom hook to use auth context
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-}; 
+export default AuthProvider; 

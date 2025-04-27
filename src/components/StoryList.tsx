@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { stories } from '../data/stories';
-import { getUserStories } from '../lib/storyService';
+import { getUserStories } from '../lib/storyManager';
 import { UserStory } from '../lib/supabase';
 import { ConnectionRecovery } from './ConnectionRecovery';
 import styles from './StoryList.module.css';
@@ -130,7 +130,7 @@ export const StoryList: React.FC<StoryListProps> = ({
         
         {/* Connection Recovery Component */}
         {connectionError && (
-          <ConnectionRecovery onRecovered={handleRecoverySuccess} />
+          <ConnectionRecovery onRecoverySuccess={handleRecoverySuccess} />
         )}
 
         {isLoading ? (
