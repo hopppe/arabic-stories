@@ -148,7 +148,8 @@ const SignupPage: React.FC = () => {
     try {
       const { error } = await signInWithGoogle();
       if (error) throw error;
-      // Google auth callback will handle the payment redirection after auth completes
+      // The auth callback will check for the from_signup parameter and redirect to payment
+      // This flow: signInWithGoogle -> auth/callback -> payment
     } catch (err: any) {
       setError(err.message || 'Failed to sign up with Google');
     }

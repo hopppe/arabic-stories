@@ -204,6 +204,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         provider: 'google',
         options: {
           redirectTo: `${origin}/auth/callback`,
+          queryParams: {
+            // Add a parameter to indicate this is from signup and requires payment redirection
+            prompt: 'select_account',
+            access_type: 'offline',
+            from_signup: 'true'
+          }
         }
       });
       

@@ -85,6 +85,18 @@ const AuthCallbackPage = () => {
         // Continue despite profile creation error
       }
       
+      // Check if this is coming from a Google sign-up flow
+      const fromSignup = router.query.from_signup === 'true' || 
+                        (typeof window !== 'undefined' && 
+                        new URLSearchParams(window.location.search).get('from_signup') === 'true');
+      
+      // If coming from signup, always redirect to payment regardless of other conditions
+      if (fromSignup) {
+        addLog('User is coming from signup flow, redirecting to payment');
+        await redirectToPayment(user);
+        return;
+      }
+      
       // Check if the user has already paid
       const { data: profile } = await supabase
         .from('profiles')
@@ -123,6 +135,11 @@ const AuthCallbackPage = () => {
       }
       
       // Otherwise, redirect to payment
+      await redirectToPayment(user);
+    };
+    
+    // Helper function to handle payment redirection
+    const redirectToPayment = async (user: any) => {
       addLog('User needs to pay, initiating payment flow');
       try {
         addLog('Creating checkout session');
@@ -158,8 +175,13 @@ const AuthCallbackPage = () => {
     const hasCodeParam = Boolean(code);
     const hasHashFragment = typeof window !== 'undefined' && window.location.hash && window.location.hash.length > 0;
     
+    // Check if this is coming from a Google sign-up flow
+    const fromSignup = router.query.from_signup === 'true' || 
+                     (typeof window !== 'undefined' && 
+                     new URLSearchParams(window.location.search).get('from_signup') === 'true');
+    
     if (hasCodeParam || hasHashFragment) {
-      addLog(`Processing auth callback. Code param: ${hasCodeParam} (${code}), Hash: ${Boolean(hasHashFragment)}`);
+      addLog(`Processing auth callback. Code param: ${hasCodeParam} (${code}), Hash: ${Boolean(hasHashFragment)}, From Signup: ${fromSignup}`);
       processAuth();
     } else if (router.isReady) {
       addLog('No auth parameters detected, redirecting to login');
