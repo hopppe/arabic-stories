@@ -90,9 +90,24 @@ const AuthCallbackPage = () => {
                         (typeof window !== 'undefined' && 
                         new URLSearchParams(window.location.search).get('from_signup') === 'true');
       
+      // Also check sessionStorage for a signup flag
+      let fromGoogleSignup = false;
+      try {
+        if (typeof window !== 'undefined') {
+          fromGoogleSignup = sessionStorage.getItem('from_google_signup') === 'true';
+          if (fromGoogleSignup) {
+            addLog('Found from_google_signup flag in sessionStorage');
+            // Clear the flag to prevent it from affecting future logins
+            sessionStorage.removeItem('from_google_signup');
+          }
+        }
+      } catch (storageErr) {
+        addLog(`Warning: Could not access sessionStorage for signup flag: ${String(storageErr)}`);
+      }
+      
       // If coming from signup, always redirect to payment regardless of other conditions
-      if (fromSignup) {
-        addLog('User is coming from signup flow, redirecting to payment');
+      if (fromSignup || fromGoogleSignup) {
+        addLog(`User is coming from signup flow (URL param: ${fromSignup}, sessionStorage: ${fromGoogleSignup}), redirecting to payment`);
         await redirectToPayment(user);
         return;
       }
@@ -159,8 +174,18 @@ const AuthCallbackPage = () => {
           throw new Error('Failed to load Stripe client. Check your NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY.');
         }
         
+        // Log additional debugging info
+        addLog(`Current environment: ${process.env.NODE_ENV}`);
+        addLog(`Current URL: ${typeof window !== 'undefined' ? window.location.href : 'SSR'}`);
+        
         addLog('Redirecting to Stripe checkout...');
-        await stripe.redirectToCheckout({ sessionId });
+        const result = await stripe.redirectToCheckout({ sessionId });
+        
+        // This should not execute if redirect is successful
+        if (result?.error) {
+          addLog(`Stripe redirectToCheckout error: ${result.error.message}`);
+          throw new Error(result.error.message);
+        }
       } catch (stripeErr: any) {
         addLog(`Stripe error: ${stripeErr.message || 'Unknown Stripe error'}`);
         // If Stripe fails, redirect to signup page as fallback
@@ -182,6 +207,11 @@ const AuthCallbackPage = () => {
     
     if (hasCodeParam || hasHashFragment) {
       addLog(`Processing auth callback. Code param: ${hasCodeParam} (${code}), Hash: ${Boolean(hasHashFragment)}, From Signup: ${fromSignup}`);
+      // Additional debug info about URL
+      addLog(`Full URL: ${typeof window !== 'undefined' ? window.location.href : 'SSR'}`);
+      addLog(`Environment: ${process.env.NODE_ENV}`);
+      addLog(`NEXT_PUBLIC_SITE_URL: ${process.env.NEXT_PUBLIC_SITE_URL || 'not set'}`);
+      
       processAuth();
     } else if (router.isReady) {
       addLog('No auth parameters detected, redirecting to login');

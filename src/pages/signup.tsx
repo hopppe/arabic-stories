@@ -45,6 +45,13 @@ const SignupPage: React.FC = () => {
         throw new Error('Supabase client not initialized. Check your environment variables.');
       }
 
+      // Log environment information
+      console.log('Environment check:', {
+        NODE_ENV: process.env.NODE_ENV,
+        SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
+        current_url: typeof window !== 'undefined' ? window.location.href : 'SSR'
+      });
+
       // Create checkout session
       const { sessionId, error } = await createCheckoutSession(userId);
       
@@ -73,7 +80,16 @@ const SignupPage: React.FC = () => {
         return;
       }
       
-      await stripe.redirectToCheckout({ sessionId });
+      console.log('Redirecting to Stripe checkout with session ID:', sessionId);
+      const result = await stripe.redirectToCheckout({ sessionId });
+      
+      // This code will only run if the redirect fails
+      if (result?.error) {
+        console.error('Stripe redirect error:', result.error);
+        setError(result.error.message || 'Failed to redirect to payment page');
+        setIsLoading(false);
+        setShowBypassOption(true);
+      }
     } catch (err: any) {
       console.error('Error redirecting to payment:', err);
       setError(err.message || 'Failed to redirect to payment page');
@@ -146,6 +162,16 @@ const SignupPage: React.FC = () => {
   const handleGoogleSignUp = async () => {
     setError('');
     try {
+      // Store a flag in sessionStorage to indicate this is a signup
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.setItem('from_google_signup', 'true');
+          console.log('Set from_google_signup flag in sessionStorage');
+        } catch (err) {
+          console.warn('Failed to write to sessionStorage', err);
+        }
+      }
+      
       const { error } = await signInWithGoogle();
       if (error) throw error;
       // The auth callback will check for the from_signup parameter and redirect to payment

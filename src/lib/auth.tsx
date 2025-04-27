@@ -2,6 +2,22 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { getSupabase, refreshSupabaseClient } from './supabase';
 
+// Helper function to get the correct site URL for redirects
+const getSiteUrl = (): string => {
+  // Use the NEXT_PUBLIC_SITE_URL environment variable if available
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    return process.env.NEXT_PUBLIC_SITE_URL.trim().replace(/\/$/, '');
+  }
+  
+  // Fallback to window.location.origin in the browser
+  if (typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+  
+  // Default fallback for SSR without configured environment
+  return '';
+};
+
 // Define auth context type
 type AuthContextType = {
   user: User | null;
@@ -198,7 +214,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     try {
       // Get current origin to handle both production and development environments
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const origin = getSiteUrl();
+      
+      console.log('Using redirect origin:', origin);
       
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -232,7 +250,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     try {
       // Get current origin if we need to set a redirect URL in the future
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const origin = getSiteUrl();
       
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -313,7 +331,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     try {
       // Get current origin to handle both production and development environments
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const origin = getSiteUrl();
       
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${origin}/auth/reset-password`,
